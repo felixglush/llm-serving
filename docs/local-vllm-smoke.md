@@ -35,27 +35,22 @@ uv pip install --python .venv-vllm/bin/python vllm
 
 ### Apple Silicon CPU smoke testing
 
-There is no prebuilt macOS CPU wheel. vLLM's experimental Apple Silicon support must be compiled
-from source. The following repeatable installation pins the source to the version validated by this
-project:
+The vLLM 0.29.0 CPU index includes a native CPython 3.12 wheel for Apple Silicon. Install the
+versioned CPU build explicitly so resolution cannot select the regular GPU package from PyPI:
 
 ```bash
-git clone --depth 1 --branch v0.29.0 \
-  https://github.com/vllm-project/vllm.git /tmp/vllm-0.29.0
-
 uv pip install --python .venv-vllm/bin/python \
-  -r /tmp/vllm-0.29.0/requirements/cpu.txt
-uv pip install --python .venv-vllm/bin/python \
-  -r /tmp/vllm-0.29.0/requirements/build/cpu.txt
-uv pip install --python .venv-vllm/bin/python \
-  /tmp/vllm-0.29.0 --no-build-isolation
+  "vllm==0.29.0+cpu" \
+  --extra-index-url https://wheels.vllm.ai/0.29.0/cpu \
+  --index-strategy first-index \
+  --torch-backend cpu
 
 .venv-vllm/bin/vllm --version
 ```
 
-This checkout was verified with `vllm 0.29.0+cpu`. The CPU build validates compatibility, not GPU
-performance. The first server start downloads the model from Hugging Face, so confirm that the host
-has enough disk space and access to the model.
+This checkout was verified with `vllm 0.29.0+cpu`. The Apple Silicon wheel is CPU-only and validates
+compatibility, not GPU performance. The first server start downloads the model from Hugging Face,
+so confirm that the host has enough disk space and access to the model.
 
 ## 2. Start one replica on one GPU
 

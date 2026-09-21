@@ -3,7 +3,9 @@ name = "embedding-serving-lab"
 version = "0.1.0"
 description = "A provider-portable lab for embedding serving experiments."
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.1,<1",
+]
 
 [project.optional-dependencies]
 dev = [

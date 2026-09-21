@@ -7,6 +7,10 @@ import os
 from collections.abc import Sequence
 
 from embedding_lab.adapters.fake.embedding_service import FakeEmbeddingService
+from embedding_lab.adapters.modal.deployment import (
+    ModalDeploymentBackend,
+    ModalDeploymentSettings,
+)
 from embedding_lab.adapters.vllm.embedding_service import (
     VllmEmbeddingService,
     VllmRequestError,
@@ -14,6 +18,8 @@ from embedding_lab.adapters.vllm.embedding_service import (
 from embedding_lab.adapters.vllm.schemas import VllmResponseError
 from embedding_lab.application.verify import validate_embeddings
 from embedding_lab.domain.embedding import EmbeddingResponse
+from embedding_lab.domain.model import ModelConfig
+from embedding_lab.domain.topology import ReplicaTopology
 
 DEFAULT_TEXTS = ("A short example sentence.", "A different example sentence.")
 
@@ -40,6 +46,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="served model name (or EMBEDDING_MODEL)",
     )
     verify_parser.add_argument("--timeout-seconds", type=float, default=30.0)
+    deploy_parser = commands.add_parser("deploy", help="deploy an embedding service")
+    deploy_parser.add_argument("--provider", choices=("modal",), required=True)
+    deploy_parser.add_argument(
+        "--model", default="Qwen/Qwen3-Embedding-0.6B", help="model repository ID"
+    )
+    deploy_parser.add_argument("--revision", help="immutable model revision")
+    deploy_parser.add_argument("--max-sequence-length", type=int, default=8_192)
+    deploy_parser.add_argument("--embedding-dimensions", type=int)
+    deploy_parser.add_argument("--replicas", type=int, default=1)
+    deploy_parser.add_argument("--tensor-parallel-size", type=int, default=1)
+    deploy_parser.add_argument("--gpu-type", default="L4")
+    deploy_parser.add_argument("--container-concurrency", type=int, default=32)
+    deploy_parser.add_argument("--max-num-seqs", type=int, default=32)
+    deploy_parser.add_argument("--max-num-batched-tokens", type=int, default=8_192)
+    deploy_parser.add_argument("--min-containers", type=int, choices=(0, 1), default=0)
+    deploy_parser.add_argument("--vllm-version", default="0.29.0")
     args = parser.parse_args(argv)
 
     if args.command == "verify":
@@ -65,6 +87,37 @@ def main(argv: Sequence[str] | None = None) -> int:
             result.failures,
         )
         return 0 if result.passed else 1
+    if args.command == "deploy":
+        settings = ModalDeploymentSettings(
+            gpu_type=args.gpu_type,
+            vllm_version=args.vllm_version,
+            container_concurrency=args.container_concurrency,
+            max_num_seqs=args.max_num_seqs,
+            max_num_batched_tokens=args.max_num_batched_tokens,
+            min_containers=args.min_containers,
+        )
+        deployment = ModalDeploymentBackend(settings).deploy(
+            ModelConfig(
+                model_id=args.model,
+                revision=args.revision,
+                max_sequence_length=args.max_sequence_length,
+                embedding_dimensions=args.embedding_dimensions,
+            ),
+            ReplicaTopology(
+                replicas=args.replicas,
+                tensor_parallel_size=args.tensor_parallel_size,
+            ),
+        )
+        print(
+            json.dumps(
+                {
+                    "name": deployment.name,
+                    "endpoint_url": deployment.endpoint_url,
+                    "configuration_fingerprint": deployment.configuration_fingerprint,
+                }
+            )
+        )
+        return 0
     return 2
 
 

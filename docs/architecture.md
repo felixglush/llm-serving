@@ -26,3 +26,8 @@ The important test is architectural: importing `embedding_lab.domain` must remai
 environment that has none of the serving or cloud dependencies installed. Provider configuration
 belongs in an adapter configuration object; domain objects use `tensor_parallel_size` to describe
 one replica spread across workers rather than naming a vendor GPU string.
+
+Each materially different serving configuration gets a deterministic deployment identity. The
+identity includes the model revision, topology, vLLM scheduler settings, GPU type, image/runtime
+versions, and container concurrency. Benchmark workloads do not affect deployment identity, so a
+concurrency or input-length sweep reuses the same endpoint instead of silently changing the server.

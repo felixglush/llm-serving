@@ -20,6 +20,8 @@ from embedding_lab.adapters.vllm.schemas import VllmResponseError
 from embedding_lab.adapters.wandb.publisher import WandbPublisher
 from embedding_lab.application.benchmark import RunBenchmark
 from embedding_lab.application.experiments import ExperimentStore, new_experiment_id, utc_now
+from embedding_lab.application.sweep import ConcurrencySweep, ConcurrencySweepPoint
+from embedding_lab.application.sweeps import SweepRecord, SweepStore
 from embedding_lab.application.verify import validate_embeddings
 from embedding_lab.domain.benchmark import BenchmarkResult
 from embedding_lab.domain.deployment import Deployment
@@ -99,6 +101,35 @@ def main(argv: Sequence[str] | None = None) -> int:
     experiment_parser.add_argument("--publish", action="store_true")
     experiment_parser.add_argument("--project", default=os.environ.get("WANDB_PROJECT"))
     experiment_parser.add_argument("--entity", default=os.environ.get("WANDB_ENTITY"))
+    sweep_parser = commands.add_parser("sweep", help="run a concurrency sweep")
+    sweep_parser.add_argument(
+        "--service", choices=("fake", "vllm"), default="fake", help="service adapter to use"
+    )
+    sweep_parser.add_argument("--base-url", default=os.environ.get("EMBEDDING_BASE_URL"))
+    sweep_parser.add_argument(
+        "--model",
+        default=os.environ.get("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B"),
+    )
+    sweep_parser.add_argument("--revision")
+    sweep_parser.add_argument("--timeout-seconds", type=float, default=30.0)
+    sweep_parser.add_argument("--concurrency-values", default="1,2,4,8,16,32")
+    sweep_parser.add_argument("--requests", type=int, default=10)
+    sweep_parser.add_argument("--texts-per-request", type=int, default=1)
+    sweep_parser.add_argument("--target-tokens-per-text", type=int, default=32)
+    sweep_parser.add_argument("--warmup-requests", type=int, default=1)
+    sweep_parser.add_argument("--seed", type=int, default=0)
+    sweep_parser.add_argument("--corpus-version", default="synthetic-v1")
+    sweep_parser.add_argument("--deployment-name", default="local-embedding-service")
+    sweep_parser.add_argument("--deployment-fingerprint", default="local")
+    sweep_parser.add_argument("--endpoint-url")
+    sweep_parser.add_argument("--gpu-type", default="unknown")
+    sweep_parser.add_argument("--replicas", type=int, default=1)
+    sweep_parser.add_argument("--tensor-parallel-size", type=int, default=1)
+    sweep_parser.add_argument("--results-dir", default="results")
+    sweep_parser.add_argument("--sweep-id")
+    sweep_parser.add_argument("--publish", action="store_true")
+    sweep_parser.add_argument("--project", default=os.environ.get("WANDB_PROJECT"))
+    sweep_parser.add_argument("--entity", default=os.environ.get("WANDB_ENTITY"))
     deploy_parser = commands.add_parser("deploy", help="deploy an embedding service")
     deploy_parser.add_argument("--provider", choices=("modal",), required=True)
     deploy_parser.add_argument(
@@ -226,6 +257,67 @@ def main(argv: Sequence[str] | None = None) -> int:
             output["wandb"] = asdict(receipt)
         print(json.dumps(output))
         return 0
+    if args.command == "sweep":
+        if args.service == "vllm" and args.base_url is None:
+            sweep_parser.error("--base-url or EMBEDDING_BASE_URL is required for vllm")
+        if args.service == "vllm" and args.revision is None:
+            sweep_parser.error("--revision is required for a persisted vllm experiment")
+        try:
+            concurrency_values = _parse_concurrency_values(args.concurrency_values)
+            workload = Workload(
+                concurrency=concurrency_values[0],
+                requests=args.requests,
+                texts_per_request=args.texts_per_request,
+                target_tokens_per_text=args.target_tokens_per_text,
+                warmup_requests=args.warmup_requests,
+                seed=args.seed,
+                corpus_version=args.corpus_version,
+            )
+            topology = ReplicaTopology(
+                replicas=args.replicas,
+                tensor_parallel_size=args.tensor_parallel_size,
+            )
+        except ValueError as error:
+            sweep_parser.error(str(error))
+        points = asyncio.run(_run_sweep(args, workload, concurrency_values))
+        sweep_id = args.sweep_id or new_experiment_id()
+        store = ExperimentStore(args.results_dir)
+        experiments: list[tuple[Experiment, object]] = []
+        for point in points:
+            experiment = _make_experiment(
+                args,
+                workload=point.workload,
+                result=point.result,
+                topology=topology,
+                experiment_id=f"{sweep_id}-c{point.concurrency}",
+            )
+            experiments.append((experiment, store.save(experiment)))
+        sweep = SweepRecord(
+            sweep_id=sweep_id,
+            created_at=utc_now(),
+            concurrency_values=tuple(point.concurrency for point in points),
+            experiment_ids=tuple(experiment.experiment_id for experiment, _ in experiments),
+        )
+        sweep_path = SweepStore(args.results_dir).save(sweep)
+        sweep_output: dict[str, object] = {
+            "sweep": sweep.to_dict(),
+            "sweep_path": str(sweep_path),
+            "experiments": [
+                {
+                    "experiment_id": experiment.experiment_id,
+                    "experiment_path": str(path),
+                }
+                for experiment, path in experiments
+            ],
+            "rows": [_sweep_row(point) for point in points],
+        }
+        if args.publish:
+            publisher = WandbPublisher(project=args.project, entity=args.entity)
+            sweep_output["wandb"] = [
+                asdict(publisher.publish(experiment, store)) for experiment, _ in experiments
+            ]
+        print(json.dumps(sweep_output))
+        return 0
     if args.command == "deploy":
         settings = ModalDeploymentSettings(
             gpu_type=args.gpu_type,
@@ -284,6 +376,82 @@ async def _run_benchmark(args: argparse.Namespace, workload: Workload) -> Benchm
         timeout_seconds=args.timeout_seconds,
     ) as service:
         return await RunBenchmark(service).run(workload)
+
+
+async def _run_sweep(
+    args: argparse.Namespace,
+    workload: Workload,
+    concurrency_values: tuple[int, ...],
+) -> tuple[ConcurrencySweepPoint, ...]:
+    if args.service == "fake":
+        return await ConcurrencySweep(FakeEmbeddingService()).run(workload, concurrency_values)
+
+    async with VllmEmbeddingService(
+        base_url=args.base_url,
+        model=args.model,
+        api_key=os.environ.get("EMBEDDING_API_KEY"),
+        timeout_seconds=args.timeout_seconds,
+    ) as service:
+        return await ConcurrencySweep(service).run(workload, concurrency_values)
+
+
+def _make_experiment(
+    args: argparse.Namespace,
+    *,
+    workload: Workload,
+    result: BenchmarkResult,
+    topology: ReplicaTopology,
+    experiment_id: str,
+) -> Experiment:
+    revision = args.revision or ("synthetic" if args.service == "fake" else None)
+    if revision is None:
+        raise ValueError("--revision is required for a persisted vllm experiment")
+    return Experiment(
+        experiment_id=experiment_id,
+        created_at=utc_now(),
+        model=ModelConfig(model_id=args.model, revision=revision),
+        topology=topology,
+        deployment=Deployment(
+            name=args.deployment_name,
+            endpoint_url=args.endpoint_url or args.base_url or "local://embedding-service",
+            configuration_fingerprint=args.deployment_fingerprint,
+        ),
+        serving_config={
+            "service": args.service,
+            "gpu_type": args.gpu_type,
+            "timeout_seconds": args.timeout_seconds,
+        },
+        workload=workload,
+        result=result,
+    )
+
+
+def _parse_concurrency_values(raw: str) -> tuple[int, ...]:
+    values = tuple(
+        int(value.strip())
+        for value in raw.split(",")
+        if value.strip()
+    )
+    if not values:
+        raise ValueError("--concurrency-values must contain at least one integer")
+    if any(value < 1 for value in values):
+        raise ValueError("--concurrency-values must contain positive integers")
+    if len(set(values)) != len(values):
+        raise ValueError("--concurrency-values must not contain duplicates")
+    return tuple(sorted(values))
+
+
+def _sweep_row(point: ConcurrencySweepPoint) -> dict[str, float | int | None]:
+    result = point.result
+    return {
+        "concurrency": point.concurrency,
+        "p50_latency_ms": result.p50_latency_ms,
+        "p95_latency_ms": result.p95_latency_ms,
+        "p99_latency_ms": result.p99_latency_ms,
+        "vectors_per_second": result.vectors_per_second,
+        "tokens_per_second": result.tokens_per_second,
+        "failure_rate": result.failure_rate,
+    }
 
 
 def _print_result(

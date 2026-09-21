@@ -36,3 +36,22 @@ For a live service, provide its endpoint and immutable model revision. Warm-up i
 the measured clock; it is not included in steady-state latency or throughput metrics. W&B SDK system
 metrics belong to the machine running the benchmark client and must not be interpreted as Modal GPU
 utilization.
+
+## Concurrency sweeps
+
+Stage 9 runs the same workload sequentially at several concurrency levels. The values are sorted,
+and every point keeps the model, deployment, seed, corpus version, request count, and input shape
+fixed. Each point is saved as its own experiment so the existing W&B Run and Artifact mapping can
+be reused:
+
+```bash
+uv run --env-file .env embedding-lab sweep \
+  --service fake \
+  --concurrency-values 1,2,4,8 \
+  --requests 20 \
+  --warmup-requests 2 \
+  --results-dir results
+```
+
+The sweep manifest is written to `results/sweeps/<sweep-id>/sweep.json`; its `experiment_ids` point
+to the individual experiment directories. Add `--publish` to publish one W&B Run per point.

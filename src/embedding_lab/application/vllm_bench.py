@@ -163,7 +163,15 @@ def normalize_metrics(payload: dict[str, Any]) -> dict[str, float | int]:
     metrics: dict[str, float | int] = {}
     _copy_number(payload, metrics, "completed", "successful_requests")
     _copy_number(payload, metrics, "failed", "failed_requests")
+    if "failed_requests" not in metrics:
+        errors = payload.get("errors")
+        if isinstance(errors, list):
+            metrics["failed_requests"] = sum(
+                1 for error in errors if isinstance(error, str) and error
+            )
     _copy_number(payload, metrics, "total_input", "input_tokens")
+    if "input_tokens" not in metrics:
+        _copy_number(payload, metrics, "total_input_tokens", "input_tokens")
     _copy_number(payload, metrics, "total_input_sequences", "vectors")
     _copy_number(payload, metrics, "request_throughput", "requests_per_second")
     _copy_number(payload, metrics, "input_sequence_throughput", "vectors_per_second")
@@ -171,6 +179,9 @@ def normalize_metrics(payload: dict[str, Any]) -> dict[str, float | int]:
     _copy_number(payload, metrics, "mean_e2el_ms", "mean_latency_ms")
     _copy_number(payload, metrics, "std_e2el_ms", "std_latency_ms")
     _copy_number(payload, metrics, "median_e2el_ms", "p50_latency_ms")
+    _copy_number(payload, metrics, "p50_e2el_ms", "p50_latency_ms")
+    _copy_number(payload, metrics, "p95_e2el_ms", "p95_latency_ms")
+    _copy_number(payload, metrics, "p99_e2el_ms", "p99_latency_ms")
     percentiles = payload.get("percentiles_e2el_ms")
     if isinstance(percentiles, list):
         for item in percentiles:

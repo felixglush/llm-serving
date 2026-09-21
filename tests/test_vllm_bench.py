@@ -45,6 +45,29 @@ def test_normalize_metrics_maps_embedding_fields_and_percentiles() -> None:
     }
 
 
+def test_normalize_metrics_maps_vllm_saved_result_shape() -> None:
+    metrics = normalize_metrics(
+        {
+            "completed": 8,
+            "errors": ["", "failed"],
+            "total_input_tokens": 256,
+            "total_input_sequences": 8,
+            "request_throughput": 5.0,
+            "input_sequence_throughput": 5.0,
+            "total_token_throughput": 160.0,
+            "p50_e2el_ms": 12.0,
+            "p95_e2el_ms": 20.0,
+            "p99_e2el_ms": 28.0,
+        }
+    )
+
+    assert metrics["failed_requests"] == 1
+    assert metrics["input_tokens"] == 256
+    assert metrics["p50_latency_ms"] == 12.0
+    assert metrics["p95_latency_ms"] == 20.0
+    assert metrics["p99_latency_ms"] == 28.0
+
+
 def test_vllm_invocation_preserves_raw_result_and_uses_expected_flags(tmp_path: Path) -> None:
     executable = tmp_path / "fake-vllm"
     executable.write_text(

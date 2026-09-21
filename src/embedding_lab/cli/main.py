@@ -120,6 +120,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     vllm_bench_parser.add_argument("--input-len", type=int, default=32)
     vllm_bench_parser.add_argument("--num-warmups", type=int, default=1)
     vllm_bench_parser.add_argument("--request-rate", default="inf")
+    vllm_bench_parser.add_argument("--ready-check-timeout-sec", type=int, default=900)
     vllm_bench_parser.add_argument("--seed", type=int, default=0)
     vllm_bench_parser.add_argument("--endpoint", default="/v1/embeddings")
     vllm_bench_parser.add_argument("--deployment-name", default="modal-embedding-service")
@@ -280,6 +281,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 request_rate=args.request_rate,
                 seed=args.seed,
                 endpoint=args.endpoint,
+                ready_check_timeout_sec=args.ready_check_timeout_sec,
             )
             raw_result, command, raw_result_path = invocation.run()
             record = VllmBenchRecord(
@@ -301,6 +303,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "gpu_type": args.gpu_type,
                     "client_location": args.client_location,
                     "request_rate": args.request_rate,
+                    "ready_check_timeout_sec": args.ready_check_timeout_sec,
                     "endpoint": args.endpoint,
                 },
                 workload={

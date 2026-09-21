@@ -61,6 +61,7 @@ class VllmBenchInvocation:
     request_rate: str = "inf"
     seed: int = 0
     endpoint: str = "/v1/embeddings"
+    ready_check_timeout_sec: int = 900
 
     def command(self, result_filename: str) -> list[str]:
         return [
@@ -87,6 +88,8 @@ class VllmBenchInvocation:
             str(self.num_warmups),
             "--request-rate",
             self.request_rate,
+            "--ready-check-timeout-sec",
+            str(self.ready_check_timeout_sec),
             "--seed",
             str(self.seed),
             "--percentile-metrics",
@@ -143,6 +146,8 @@ class VllmBenchInvocation:
             raise ValueError("num_prompts, max_concurrency, and input_len must be positive")
         if self.num_warmups < 0:
             raise ValueError("num_warmups must not be negative")
+        if self.ready_check_timeout_sec < 1:
+            raise ValueError("ready_check_timeout_sec must be positive")
         if not self.endpoint.startswith("/"):
             raise ValueError("endpoint must start with '/'")
 

@@ -56,6 +56,7 @@ uv run embedding-lab vllm-bench \
   --num-prompts 100 \
   --max-concurrency 4 \
   --num-warmups 2 \
+  --ready-check-timeout-sec 900 \
   --publish
 ```
 

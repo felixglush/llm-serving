@@ -3,7 +3,7 @@
 The lab follows a simple dependency direction:
 
 ```text
-entrypoints -> application -> ports -> adapters
+entrypoints -> application -> ports <- adapters
                   |
                   v
                 domain

@@ -24,7 +24,7 @@ artifacts.
 ## Development
 
 ```bash
-UV_CACHE_DIR=/private/tmp/llm-serving-uv-cache uv sync --extra dev --extra modal
+UV_CACHE_DIR=/private/tmp/llm-serving-uv-cache uv sync --extra dev
 uv run ruff check .
 uv run mypy
 uv run pytest

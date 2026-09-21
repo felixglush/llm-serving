@@ -3,7 +3,7 @@ import math
 import pytest
 
 from embedding_lab.adapters.fake.embedding_service import FakeEmbeddingService
-from embedding_lab.application.verify import VerifyEmbeddingService
+from embedding_lab.application.verify import verify_embeddings
 from embedding_lab.domain.embedding import Embedding, EmbeddingResponse
 
 
@@ -25,8 +25,8 @@ class SequenceService:
 
 
 async def test_fake_service_passes_verification_without_infrastructure() -> None:
-    result = await VerifyEmbeddingService(FakeEmbeddingService(dimensions=5)).run(
-        ["alpha", "beta"], expected_dimensions=5
+    result = await verify_embeddings(
+        FakeEmbeddingService(dimensions=5), ["alpha", "beta"], expected_dimensions=5
     )
 
     assert result.passed
@@ -41,7 +41,7 @@ async def test_repeated_batch_uses_the_same_inputs_and_tolerates_small_drift() -
         response((1.000005, 2.0), (3.0, 4.0)),
     )
 
-    result = await VerifyEmbeddingService(service).run(["alpha", "beta"])
+    result = await verify_embeddings(service, ["alpha", "beta"])
 
     assert result.passed
     assert service.calls == [["alpha", "beta"], ["alpha", "beta"]]
@@ -74,15 +74,15 @@ async def test_verification_reports_invalid_embeddings(
         else ["alpha"]
     )
 
-    result = await VerifyEmbeddingService(service).run(texts)
+    result = await verify_embeddings(service, texts)
 
     assert not result.passed
     assert any(failure in problem for problem in result.failures)
 
 
 async def test_expected_dimensions_are_checked() -> None:
-    result = await VerifyEmbeddingService(FakeEmbeddingService(dimensions=5)).run(
-        ["alpha"], expected_dimensions=4
+    result = await verify_embeddings(
+        FakeEmbeddingService(dimensions=5), ["alpha"], expected_dimensions=4
     )
 
     assert not result.passed
@@ -93,7 +93,7 @@ async def test_expected_dimensions_are_checked() -> None:
 async def test_dimensions_must_remain_consistent_between_runs() -> None:
     service = SequenceService(response((1.0, 2.0)), response((1.0, 2.0, 3.0)))
 
-    result = await VerifyEmbeddingService(service).run(["alpha"])
+    result = await verify_embeddings(service, ["alpha"])
 
     assert not result.passed
     assert "vector dimensions changed between runs" in result.failures
@@ -101,14 +101,14 @@ async def test_dimensions_must_remain_consistent_between_runs() -> None:
 
 async def test_empty_verification_batch_is_rejected() -> None:
     with pytest.raises(ValueError, match="at least one"):
-        await VerifyEmbeddingService(FakeEmbeddingService()).run([])
+        await verify_embeddings(FakeEmbeddingService(), [])
 
 
 async def test_plain_string_is_rejected_as_batch() -> None:
     with pytest.raises(ValueError, match="at least one input text"):
-        await VerifyEmbeddingService(FakeEmbeddingService()).run("alpha")
+        await verify_embeddings(FakeEmbeddingService(), "alpha")
 
 
 async def test_invalid_expected_dimensions_are_rejected() -> None:
     with pytest.raises(ValueError, match="expected_dimensions"):
-        await VerifyEmbeddingService(FakeEmbeddingService()).run(["alpha"], expected_dimensions=0)
+        await verify_embeddings(FakeEmbeddingService(), ["alpha"], expected_dimensions=0)

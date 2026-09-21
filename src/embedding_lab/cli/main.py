@@ -6,7 +6,7 @@ import json
 from collections.abc import Sequence
 
 from embedding_lab.adapters.fake.embedding_service import FakeEmbeddingService
-from embedding_lab.application.verify import DEFAULT_TEXTS, VerifyEmbeddingService
+from embedding_lab.application.verify import DEFAULT_TEXTS, verify_embeddings
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -23,9 +23,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.expected_dimensions is not None and args.expected_dimensions < 1:
             verify_parser.error("--expected-dimensions must be positive")
         service = FakeEmbeddingService()
-        use_case = VerifyEmbeddingService(service)
         result = asyncio.run(
-            use_case.run(
+            verify_embeddings(
+                service,
                 args.text if args.text is not None else DEFAULT_TEXTS,
                 expected_dimensions=args.expected_dimensions,
             )

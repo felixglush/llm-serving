@@ -23,54 +23,50 @@ class VerificationResult:
         return not self.failures
 
 
-class VerifyEmbeddingService:
-    """Run the same batch twice and validate shape, values, and repeatability."""
+async def verify_embeddings(
+    service: EmbeddingService,
+    texts: Sequence[str] = DEFAULT_TEXTS,
+    *,
+    expected_dimensions: int | None = None,
+) -> VerificationResult:
+    """Check any embedding-service adapter by running the same batch twice."""
 
-    def __init__(self, service: EmbeddingService) -> None:
-        self._service = service
+    if isinstance(texts, str) or not texts:
+        raise ValueError("verification requires at least one input text")
+    if expected_dimensions is not None and (
+        isinstance(expected_dimensions, bool)
+        or not isinstance(expected_dimensions, int)
+        or expected_dimensions < 1
+    ):
+        raise ValueError("expected_dimensions must be a positive integer")
 
-    async def run(
-        self,
-        texts: Sequence[str] = DEFAULT_TEXTS,
-        *,
-        expected_dimensions: int | None = None,
-    ) -> VerificationResult:
-        if isinstance(texts, str) or not texts:
-            raise ValueError("verification requires at least one input text")
-        if expected_dimensions is not None and (
-            isinstance(expected_dimensions, bool)
-            or not isinstance(expected_dimensions, int)
-            or expected_dimensions < 1
+    first = await service.embed(list(texts))
+    repeated = await service.embed(list(texts))
+    failures: list[str] = []
+    first_dimensions, first_valid = _inspect(
+        first, "first", len(texts), expected_dimensions, failures
+    )
+    repeated_dimensions, repeated_valid = _inspect(
+        repeated, "repeated", len(texts), expected_dimensions, failures
+    )
+
+    if first_valid and repeated_valid and first_dimensions != repeated_dimensions:
+        failures.append("vector dimensions changed between runs")
+    if first_valid and repeated_valid and first_dimensions == repeated_dimensions:
+        for index, (original, again) in enumerate(
+            zip(first.embeddings, repeated.embeddings, strict=True)
         ):
-            raise ValueError("expected_dimensions must be a positive integer")
-
-        first = await self._service.embed(list(texts))
-        repeated = await self._service.embed(list(texts))
-        failures: list[str] = []
-        first_dimensions, first_valid = _inspect(
-            first, "first", len(texts), expected_dimensions, failures
-        )
-        repeated_dimensions, repeated_valid = _inspect(
-            repeated, "repeated", len(texts), expected_dimensions, failures
-        )
-
-        if first_valid and repeated_valid and first_dimensions != repeated_dimensions:
-            failures.append("vector dimensions changed between runs")
-        if first_valid and repeated_valid and first_dimensions == repeated_dimensions:
-            for index, (original, again) in enumerate(
-                zip(first.embeddings, repeated.embeddings, strict=True)
+            if any(
+                not math.isclose(left, right, rel_tol=1e-5, abs_tol=1e-6)
+                for left, right in zip(original.values, again.values, strict=True)
             ):
-                if any(
-                    not math.isclose(left, right, rel_tol=1e-5, abs_tol=1e-6)
-                    for left, right in zip(original.values, again.values, strict=True)
-                ):
-                    failures.append(f"embedding {index} changed between runs")
+                failures.append(f"embedding {index} changed between runs")
 
-        return VerificationResult(
-            input_count=len(texts),
-            dimensions=first_dimensions,
-            failures=tuple(failures),
-        )
+    return VerificationResult(
+        input_count=len(texts),
+        dimensions=first_dimensions,
+        failures=tuple(failures),
+    )
 
 
 def _inspect(

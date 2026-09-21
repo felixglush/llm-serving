@@ -1,12 +1,10 @@
-"""Check the observable contract of an embedding service."""
+"""Validate a batch of embeddings against its source texts."""
 
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from embedding_lab.ports.embedding_service import EmbeddingService
-
-DEFAULT_TEXTS = ("A short example sentence.", "A different example sentence.")
+from embedding_lab.domain.embedding import Embedding
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,13 +20,13 @@ class VerificationResult:
         return not self.failures
 
 
-async def verify_embeddings(
-    service: EmbeddingService,
-    texts: Sequence[str] = DEFAULT_TEXTS,
+def validate_embeddings(
+    texts: Sequence[str],
+    embeddings: Sequence[Embedding],
     *,
     expected_dimensions: int | None = None,
 ) -> VerificationResult:
-    """Check one batch from any embedding-service adapter."""
+    """Check vector count, dimensions, and numeric values without performing I/O."""
 
     if isinstance(texts, str) or not texts:
         raise ValueError("verification requires at least one input text")
@@ -39,16 +37,15 @@ async def verify_embeddings(
     ):
         raise ValueError("expected_dimensions must be a positive integer")
 
-    response = await service.embed(list(texts))
     failures: list[str] = []
-    consistent_dimensions = len(response.embeddings) == len(texts)
+    consistent_dimensions = len(embeddings) == len(texts)
     if not consistent_dimensions:
         failures.append(
-            f"service returned {len(response.embeddings)} vectors for {len(texts)} texts"
+            f"received {len(embeddings)} vectors for {len(texts)} texts"
         )
 
     dimensions: int | None = None
-    for index, embedding in enumerate(response.embeddings):
+    for index, embedding in enumerate(embeddings):
         size = len(embedding.values)
         if size == 0:
             failures.append(f"embedding {index} is empty")

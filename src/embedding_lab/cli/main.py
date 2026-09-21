@@ -21,12 +21,19 @@ from embedding_lab.adapters.wandb.publisher import WandbPublisher
 from embedding_lab.application.benchmark import RunBenchmark
 from embedding_lab.application.experiments import ExperimentStore, new_experiment_id, utc_now
 from embedding_lab.application.verify import validate_embeddings
+from embedding_lab.application.vllm_bench import (
+    VllmBenchError,
+    VllmBenchInvocation,
+    VllmBenchStore,
+    normalize_metrics,
+)
 from embedding_lab.domain.benchmark import BenchmarkResult
 from embedding_lab.domain.deployment import Deployment
 from embedding_lab.domain.embedding import EmbeddingResponse
 from embedding_lab.domain.experiment import Experiment
 from embedding_lab.domain.model import ModelConfig
 from embedding_lab.domain.topology import ReplicaTopology
+from embedding_lab.domain.vllm_benchmark import VllmBenchRecord
 from embedding_lab.domain.workload import Workload
 
 DEFAULT_TEXTS = ("A short example sentence.", "A different example sentence.")
@@ -99,6 +106,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     experiment_parser.add_argument("--publish", action="store_true")
     experiment_parser.add_argument("--project", default=os.environ.get("WANDB_PROJECT"))
     experiment_parser.add_argument("--entity", default=os.environ.get("WANDB_ENTITY"))
+    vllm_bench_parser = commands.add_parser(
+        "vllm-bench", help="run vLLM's reference serving benchmark and optionally publish it"
+    )
+    vllm_bench_parser.add_argument("--base-url", default=os.environ.get("EMBEDDING_BASE_URL"))
+    vllm_bench_parser.add_argument(
+        "--model", default=os.environ.get("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B")
+    )
+    vllm_bench_parser.add_argument("--revision", required=True)
+    vllm_bench_parser.add_argument("--vllm-bin", default=os.environ.get("VLLM_BIN", "vllm"))
+    vllm_bench_parser.add_argument("--num-prompts", type=int, default=100)
+    vllm_bench_parser.add_argument("--max-concurrency", type=int, default=1)
+    vllm_bench_parser.add_argument("--input-len", type=int, default=32)
+    vllm_bench_parser.add_argument("--num-warmups", type=int, default=1)
+    vllm_bench_parser.add_argument("--request-rate", default="inf")
+    vllm_bench_parser.add_argument("--seed", type=int, default=0)
+    vllm_bench_parser.add_argument("--endpoint", default="/v1/embeddings")
+    vllm_bench_parser.add_argument("--deployment-name", default="modal-embedding-service")
+    vllm_bench_parser.add_argument("--deployment-fingerprint", default="unknown")
+    vllm_bench_parser.add_argument("--endpoint-url")
+    vllm_bench_parser.add_argument("--gpu-type", default="unknown")
+    vllm_bench_parser.add_argument("--replicas", type=int, default=1)
+    vllm_bench_parser.add_argument("--tensor-parallel-size", type=int, default=1)
+    vllm_bench_parser.add_argument("--vllm-version", default="unknown")
+    vllm_bench_parser.add_argument("--client-location", default="local")
+    vllm_bench_parser.add_argument("--results-dir", default="results")
+    vllm_bench_parser.add_argument("--publish", action="store_true")
+    vllm_bench_parser.add_argument("--project", default=os.environ.get("WANDB_PROJECT"))
+    vllm_bench_parser.add_argument("--entity", default=os.environ.get("WANDB_ENTITY"))
     deploy_parser = commands.add_parser("deploy", help="deploy an embedding service")
     deploy_parser.add_argument("--provider", choices=("modal",), required=True)
     deploy_parser.add_argument(
@@ -225,6 +260,76 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             output["wandb"] = asdict(receipt)
         print(json.dumps(output))
+        return 0
+    if args.command == "vllm-bench":
+        if args.base_url is None:
+            vllm_bench_parser.error("--base-url or EMBEDDING_BASE_URL is required")
+        try:
+            experiment_id = new_experiment_id()
+            vllm_store = VllmBenchStore(args.results_dir)
+            result_dir = vllm_store.directory(experiment_id)
+            invocation = VllmBenchInvocation(
+                executable=args.vllm_bin,
+                base_url=args.base_url,
+                model=args.model,
+                result_dir=result_dir,
+                num_prompts=args.num_prompts,
+                max_concurrency=args.max_concurrency,
+                input_len=args.input_len,
+                num_warmups=args.num_warmups,
+                request_rate=args.request_rate,
+                seed=args.seed,
+                endpoint=args.endpoint,
+            )
+            raw_result, command, raw_result_path = invocation.run()
+            record = VllmBenchRecord(
+                experiment_id=experiment_id,
+                created_at=utc_now(),
+                model=ModelConfig(model_id=args.model, revision=args.revision),
+                topology=ReplicaTopology(
+                    replicas=args.replicas,
+                    tensor_parallel_size=args.tensor_parallel_size,
+                ),
+                deployment=Deployment(
+                    name=args.deployment_name,
+                    endpoint_url=args.endpoint_url or args.base_url,
+                    configuration_fingerprint=args.deployment_fingerprint,
+                ),
+                serving_config={
+                    "vllm_bin": args.vllm_bin,
+                    "vllm_version": args.vllm_version,
+                    "gpu_type": args.gpu_type,
+                    "client_location": args.client_location,
+                    "request_rate": args.request_rate,
+                    "endpoint": args.endpoint,
+                },
+                workload={
+                    "dataset_name": "random",
+                    "num_prompts": args.num_prompts,
+                    "max_concurrency": args.max_concurrency,
+                    "input_len": args.input_len,
+                    "num_warmups": args.num_warmups,
+                    "seed": args.seed,
+                },
+                command=tuple(command),
+                metrics=normalize_metrics(raw_result),
+                raw_result=raw_result,
+            )
+            record_path = vllm_store.save(record)
+            bench_output: dict[str, object] = {
+                "experiment_id": experiment_id,
+                "record_path": str(record_path),
+                "raw_result_path": str(raw_result_path),
+                "record": record.to_dict(),
+            }
+            if args.publish:
+                receipt = WandbPublisher(
+                    project=args.project, entity=args.entity
+                ).publish_vllm_bench(record, vllm_store, str(raw_result_path))
+                bench_output["wandb"] = asdict(receipt)
+            print(json.dumps(bench_output))
+        except (VllmBenchError, ValueError) as error:
+            vllm_bench_parser.error(str(error))
         return 0
     if args.command == "deploy":
         settings = ModalDeploymentSettings(

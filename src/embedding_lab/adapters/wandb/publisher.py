@@ -7,7 +7,9 @@ from embedding_lab.application.experiments import (
     ExperimentStore,
     PublicationReceipt,
 )
+from embedding_lab.application.vllm_bench import VllmBenchStore
 from embedding_lab.domain.experiment import Experiment
+from embedding_lab.domain.vllm_benchmark import VllmBenchRecord
 
 
 class WandbPublisher:
@@ -69,6 +71,52 @@ class WandbPublisher:
         store.save_receipt(receipt)
         return receipt
 
+    def publish_vllm_bench(
+        self, record: VllmBenchRecord, store: VllmBenchStore, raw_result_path: str
+    ) -> PublicationReceipt:
+        """Publish a vLLM reference result without altering its raw JSON schema."""
+
+        if not self.project:
+            raise ValueError("WANDB_PROJECT or an explicit project is required")
+        existing = store.load_receipt(record.experiment_id)
+        if existing is not None:
+            if existing.project != self.project or existing.entity != self.entity:
+                raise ValueError("existing W&B publication uses a different project or entity")
+            return existing
+
+        client = self._client or _load_wandb()
+        record_path = store.save(record)
+        artifact_name = f"vllm-benchmark-{record.experiment_id}"
+        init_kwargs: dict[str, Any] = {
+            "project": self.project,
+            "id": record.experiment_id,
+            "resume": "allow",
+            "name": f"vllm-benchmark-{record.experiment_id}",
+            "job_type": "benchmark",
+            "group": f"deployment-{record.deployment.configuration_fingerprint}",
+            "config": _vllm_config_for(record),
+            "tags": ["embedding-benchmark", "vllm-bench"],
+        }
+        if self.entity:
+            init_kwargs["entity"] = self.entity
+
+        with client.init(**init_kwargs) as run:
+            run.log(record.metrics)
+            artifact = client.Artifact(artifact_name, type="benchmark")
+            artifact.add_file(str(record_path))
+            artifact.add_file(raw_result_path)
+            run.log_artifact(artifact)
+            receipt = PublicationReceipt(
+                experiment_id=record.experiment_id,
+                entity=self.entity,
+                project=self.project,
+                run_id=str(run.id),
+                run_url=getattr(run, "url", None),
+                artifact_name=artifact_name,
+            )
+        store.save_receipt(receipt)
+        return receipt
+
 
 def _load_wandb() -> Any:
     import wandb
@@ -117,3 +165,20 @@ def _metrics_for(experiment: Experiment) -> dict[str, float | int]:
         "warmup_failed_requests": result.warmup_failed_requests,
     }
     return {key: value for key, value in metrics.items() if value is not None}
+
+
+def _vllm_config_for(record: VllmBenchRecord) -> dict[str, Any]:
+    return {
+        "experiment_id": record.experiment_id,
+        "benchmark_source": "vllm-bench",
+        "model_id": record.model.model_id,
+        "model_revision": record.model.revision,
+        "deployment_name": record.deployment.name,
+        "deployment_fingerprint": record.deployment.configuration_fingerprint,
+        "endpoint_url": record.deployment.endpoint_url,
+        "replicas": record.topology.replicas,
+        "tensor_parallel_size": record.topology.tensor_parallel_size,
+        "input_tokens_source": "vllm_prompt_len",
+        **{f"workload_{key}": value for key, value in record.workload.items()},
+        **{f"serving_{key}": value for key, value in record.serving_config.items()},
+    }

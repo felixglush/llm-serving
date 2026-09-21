@@ -11,6 +11,10 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+.env
+.env.*
+!.env.example
+/wandb/
 
 # Local experiment output can be retained explicitly with git add -f.
 results/*

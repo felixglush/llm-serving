@@ -17,10 +17,14 @@ from embedding_lab.adapters.vllm.embedding_service import (
     VllmRequestError,
 )
 from embedding_lab.adapters.vllm.schemas import VllmResponseError
+from embedding_lab.adapters.wandb.publisher import WandbPublisher
 from embedding_lab.application.benchmark import RunBenchmark
+from embedding_lab.application.experiments import ExperimentStore, new_experiment_id, utc_now
 from embedding_lab.application.verify import validate_embeddings
 from embedding_lab.domain.benchmark import BenchmarkResult
+from embedding_lab.domain.deployment import Deployment
 from embedding_lab.domain.embedding import EmbeddingResponse
+from embedding_lab.domain.experiment import Experiment
 from embedding_lab.domain.model import ModelConfig
 from embedding_lab.domain.topology import ReplicaTopology
 from embedding_lab.domain.workload import Workload
@@ -67,6 +71,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     benchmark_parser.add_argument("--warmup-requests", type=int, default=1)
     benchmark_parser.add_argument("--seed", type=int, default=0)
     benchmark_parser.add_argument("--corpus-version", default="synthetic-v1")
+    experiment_parser = commands.add_parser("experiment", help="run and save a benchmark")
+    experiment_parser.add_argument(
+        "--service", choices=("fake", "vllm"), default="fake", help="service adapter to use"
+    )
+    experiment_parser.add_argument("--base-url", default=os.environ.get("EMBEDDING_BASE_URL"))
+    experiment_parser.add_argument(
+        "--model",
+        default=os.environ.get("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B"),
+    )
+    experiment_parser.add_argument("--revision")
+    experiment_parser.add_argument("--timeout-seconds", type=float, default=30.0)
+    experiment_parser.add_argument("--concurrency", type=int, default=1)
+    experiment_parser.add_argument("--requests", type=int, default=10)
+    experiment_parser.add_argument("--texts-per-request", type=int, default=1)
+    experiment_parser.add_argument("--target-tokens-per-text", type=int, default=32)
+    experiment_parser.add_argument("--warmup-requests", type=int, default=1)
+    experiment_parser.add_argument("--seed", type=int, default=0)
+    experiment_parser.add_argument("--corpus-version", default="synthetic-v1")
+    experiment_parser.add_argument("--deployment-name", default="local-embedding-service")
+    experiment_parser.add_argument("--deployment-fingerprint", default="local")
+    experiment_parser.add_argument("--endpoint-url")
+    experiment_parser.add_argument("--gpu-type", default="unknown")
+    experiment_parser.add_argument("--replicas", type=int, default=1)
+    experiment_parser.add_argument("--tensor-parallel-size", type=int, default=1)
+    experiment_parser.add_argument("--results-dir", default="results")
+    experiment_parser.add_argument("--publish", action="store_true")
+    experiment_parser.add_argument("--project", default=os.environ.get("WANDB_PROJECT"))
+    experiment_parser.add_argument("--entity", default=os.environ.get("WANDB_ENTITY"))
     deploy_parser = commands.add_parser("deploy", help="deploy an embedding service")
     deploy_parser.add_argument("--provider", choices=("modal",), required=True)
     deploy_parser.add_argument(
@@ -138,6 +170,61 @@ def main(argv: Sequence[str] | None = None) -> int:
                 }
             )
         )
+        return 0
+    if args.command == "experiment":
+        if args.service == "vllm" and args.base_url is None:
+            experiment_parser.error("--base-url or EMBEDDING_BASE_URL is required for vllm")
+        try:
+            workload = Workload(
+                concurrency=args.concurrency,
+                requests=args.requests,
+                texts_per_request=args.texts_per_request,
+                target_tokens_per_text=args.target_tokens_per_text,
+                warmup_requests=args.warmup_requests,
+                seed=args.seed,
+                corpus_version=args.corpus_version,
+            )
+            topology = ReplicaTopology(
+                replicas=args.replicas,
+                tensor_parallel_size=args.tensor_parallel_size,
+            )
+        except ValueError as error:
+            experiment_parser.error(str(error))
+        revision = args.revision or ("synthetic" if args.service == "fake" else None)
+        if args.publish and revision is None:
+            experiment_parser.error("--revision is required when publishing a live experiment")
+        benchmark_result = asyncio.run(_run_benchmark(args, workload))
+        experiment = Experiment(
+            experiment_id=new_experiment_id(),
+            created_at=utc_now(),
+            model=ModelConfig(model_id=args.model, revision=revision),
+            topology=topology,
+            deployment=Deployment(
+                name=args.deployment_name,
+                endpoint_url=args.endpoint_url or args.base_url or "local://embedding-service",
+                configuration_fingerprint=args.deployment_fingerprint,
+            ),
+            serving_config={
+                "service": args.service,
+                "gpu_type": args.gpu_type,
+                "timeout_seconds": args.timeout_seconds,
+            },
+            workload=workload,
+            result=benchmark_result,
+        )
+        store = ExperimentStore(args.results_dir)
+        experiment_path = store.save(experiment)
+        output: dict[str, object] = {
+            "experiment_id": experiment.experiment_id,
+            "experiment_path": str(experiment_path),
+            "experiment": experiment.to_dict(),
+        }
+        if args.publish:
+            receipt = WandbPublisher(project=args.project, entity=args.entity).publish(
+                experiment, store
+            )
+            output["wandb"] = asdict(receipt)
+        print(json.dumps(output))
         return 0
     if args.command == "deploy":
         settings = ModalDeploymentSettings(

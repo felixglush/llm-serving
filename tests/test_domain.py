@@ -73,3 +73,32 @@ def test_all_failed_result_has_no_fake_latency() -> None:
     assert result.p95_latency_ms is None
     assert result.tokens_per_second is None
     assert result.failure_rate == 1.0
+
+
+@pytest.mark.parametrize(
+    ("successful_requests", "p50", "p95", "p99"),
+    [
+        (0, 0.0, 0.0, 0.0),
+        (1, None, None, None),
+        (1, 1.0, None, 3.0),
+    ],
+)
+def test_latency_percentiles_match_success_count(
+    successful_requests: int,
+    p50: float | None,
+    p95: float | None,
+    p99: float | None,
+) -> None:
+    with pytest.raises(ValueError, match="latency percentiles"):
+        BenchmarkResult(
+            successful_requests=successful_requests,
+            failed_requests=1,
+            p50_latency_ms=p50,
+            p95_latency_ms=p95,
+            p99_latency_ms=p99,
+            vectors_per_second=0.0,
+            tokens_per_second=None,
+            elapsed_seconds=1.0,
+            actual_input_tokens=None,
+            estimated_input_tokens=1,
+        )

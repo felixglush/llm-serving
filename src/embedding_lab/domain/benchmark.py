@@ -53,6 +53,11 @@ class BenchmarkResult:
         _validate_percentile("p50_latency_ms", self.p50_latency_ms)
         _validate_percentile("p95_latency_ms", self.p95_latency_ms)
         _validate_percentile("p99_latency_ms", self.p99_latency_ms)
+        latencies = (self.p50_latency_ms, self.p95_latency_ms, self.p99_latency_ms)
+        if self.successful_requests == 0 and any(value is not None for value in latencies):
+            raise ValueError("latency percentiles require successful requests")
+        if self.successful_requests > 0 and any(value is None for value in latencies):
+            raise ValueError("successful requests require all latency percentiles")
         if (
             self.p50_latency_ms is not None
             and self.p95_latency_ms is not None

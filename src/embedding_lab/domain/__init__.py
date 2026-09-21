@@ -1,9 +1,16 @@
 """Vendor-neutral concepts used by the embedding lab."""
 
-from embedding_lab.domain.benchmark import BenchmarkResult
+from embedding_lab.domain.benchmark import BenchmarkResult, RequestObservation
 from embedding_lab.domain.deployment import Deployment
 from embedding_lab.domain.model import ModelConfig
 from embedding_lab.domain.topology import ReplicaTopology
 from embedding_lab.domain.workload import Workload
 
-__all__ = ["BenchmarkResult", "Deployment", "ModelConfig", "ReplicaTopology", "Workload"]
+__all__ = [
+    "BenchmarkResult",
+    "Deployment",
+    "ModelConfig",
+    "ReplicaTopology",
+    "RequestObservation",
+    "Workload",
+]

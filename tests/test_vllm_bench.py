@@ -77,6 +77,7 @@ def test_vllm_invocation_preserves_raw_result_and_uses_expected_flags(tmp_path: 
     assert command[command.index("--backend") + 1] == "openai-embeddings"
     assert command[command.index("--max-concurrency") + 1] == "2"
     assert command[command.index("--ready-check-timeout-sec") + 1] == "900"
+    assert command[command.index("--label") + 1] == "vllm-embeddings"
 
 
 def make_record() -> VllmBenchRecord:

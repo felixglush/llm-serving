@@ -62,6 +62,7 @@ class VllmBenchInvocation:
     seed: int = 0
     endpoint: str = "/v1/embeddings"
     ready_check_timeout_sec: int = 900
+    label: str = "vllm-embeddings"
 
     def command(self, result_filename: str) -> list[str]:
         return [
@@ -74,6 +75,8 @@ class VllmBenchInvocation:
             self.base_url,
             "--endpoint",
             self.endpoint,
+            "--label",
+            self.label,
             "--model",
             self.model,
             "--dataset-name",
@@ -150,6 +153,8 @@ class VllmBenchInvocation:
             raise ValueError("ready_check_timeout_sec must be positive")
         if not self.endpoint.startswith("/"):
             raise ValueError("endpoint must start with '/'")
+        if not self.label.strip():
+            raise ValueError("label must not be empty")
 
 
 def normalize_metrics(payload: dict[str, Any]) -> dict[str, float | int]:

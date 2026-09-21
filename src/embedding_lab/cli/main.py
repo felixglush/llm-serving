@@ -123,6 +123,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     vllm_bench_parser.add_argument("--ready-check-timeout-sec", type=int, default=900)
     vllm_bench_parser.add_argument("--seed", type=int, default=0)
     vllm_bench_parser.add_argument("--endpoint", default="/v1/embeddings")
+    vllm_bench_parser.add_argument("--label", default="vllm-embeddings")
     vllm_bench_parser.add_argument("--deployment-name", default="modal-embedding-service")
     vllm_bench_parser.add_argument("--deployment-fingerprint", default="unknown")
     vllm_bench_parser.add_argument("--endpoint-url")
@@ -282,6 +283,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 seed=args.seed,
                 endpoint=args.endpoint,
                 ready_check_timeout_sec=args.ready_check_timeout_sec,
+                label=args.label,
             )
             raw_result, command, raw_result_path = invocation.run()
             record = VllmBenchRecord(
@@ -305,6 +307,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "request_rate": args.request_rate,
                     "ready_check_timeout_sec": args.ready_check_timeout_sec,
                     "endpoint": args.endpoint,
+                    "label": args.label,
                 },
                 workload={
                     "dataset_name": "random",

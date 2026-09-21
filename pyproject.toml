@@ -1,0 +1,51 @@
+[project]
+name = "embedding-serving-lab"
+version = "0.1.0"
+description = "A provider-portable lab for embedding serving experiments."
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.28.1,<1",
+]
+
+[project.optional-dependencies]
+modal = [
+    "modal>=1.5.5,<2",
+]
+wandb = [
+    "wandb>=0.28.1,<1",
+]
+dev = [
+    "mypy>=1.17,<2",
+    "pytest>=8.4,<9",
+    "pytest-asyncio>=1.1,<2",
+    "ruff>=0.12,<1",
+]
+
+[project.scripts]
+embedding-lab = "embedding_lab.cli.main:main"
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/embedding_lab"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src", "tests"]
+exclude = ['^\\.venv/']

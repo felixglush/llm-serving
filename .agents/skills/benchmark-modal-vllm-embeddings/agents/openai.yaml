@@ -1,0 +1,4 @@
+interface:
+  display_name: "Benchmark Modal vLLM Embeddings"
+  short_description: "Benchmark a Modal-hosted vLLM embedding endpoint"
+  default_prompt: "Use $benchmark-modal-vllm-embeddings to benchmark my deployed embedding endpoint and preserve comparable results."

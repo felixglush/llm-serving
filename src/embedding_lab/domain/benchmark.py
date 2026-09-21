@@ -15,7 +15,7 @@ class BenchmarkResult:
 
     Latencies are successful-request percentiles. ``None`` means there were no successful
     requests, so callers cannot accidentally read a fabricated zero. Input tokens are the
-    embedding server's reported usage for successful requests, not generated output tokens.
+    server's reported usage for successful requests, not generated output tokens.
     """
 
     successful_requests: int

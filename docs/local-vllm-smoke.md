@@ -16,16 +16,46 @@ represents one replica; starting and routing multiple replicas belongs to a depl
 
 ## 1. Prepare a server environment
 
-Keep the vLLM server environment separate from this project's client environment. For example, on
-a supported Linux GPU machine:
+Keep the vLLM server environment separate from this project's Python 3.13 client environment:
 
 ```bash
 uv venv --python 3.12 .venv-vllm
-uv pip install --python .venv-vllm/bin/python vllm
 ```
 
-The first server start downloads the model from Hugging Face. Confirm that the machine has enough
-disk space and access to the model before continuing.
+The environment is ignored by Git. Install vLLM using the path for the server host.
+
+### Linux with a supported GPU
+
+Prebuilt wheels are available for the primary GPU platforms:
+
+```bash
+uv pip install --python .venv-vllm/bin/python vllm
+.venv-vllm/bin/vllm --version
+```
+
+### Apple Silicon CPU smoke testing
+
+There is no prebuilt macOS CPU wheel. vLLM's experimental Apple Silicon support must be compiled
+from source. The following repeatable installation pins the source to the version validated by this
+project:
+
+```bash
+git clone --depth 1 --branch v0.29.0 \
+  https://github.com/vllm-project/vllm.git /tmp/vllm-0.29.0
+
+uv pip install --python .venv-vllm/bin/python \
+  -r /tmp/vllm-0.29.0/requirements/cpu.txt
+uv pip install --python .venv-vllm/bin/python \
+  -r /tmp/vllm-0.29.0/requirements/build/cpu.txt
+uv pip install --python .venv-vllm/bin/python \
+  /tmp/vllm-0.29.0 --no-build-isolation
+
+.venv-vllm/bin/vllm --version
+```
+
+This checkout was verified with `vllm 0.29.0+cpu`. The CPU build validates compatibility, not GPU
+performance. The first server start downloads the model from Hugging Face, so confirm that the host
+has enough disk space and access to the model.
 
 ## 2. Start one replica on one GPU
 
@@ -36,11 +66,31 @@ These are conservative smoke-test values, not benchmark conclusions:
   --runner pooling \
   --host 127.0.0.1 \
   --port 8000 \
+  --dtype float16 \
   --max-model-len 8192 \
   --max-num-seqs 32 \
   --max-num-batched-tokens 8192 \
   --tensor-parallel-size 1
 ```
+
+On a 16 GiB Apple Silicon host, use this smaller CPU-only smoke profile:
+
+```bash
+.venv-vllm/bin/vllm serve Qwen/Qwen3-Embedding-0.6B \
+  --runner pooling \
+  --host 127.0.0.1 \
+  --port 8000 \
+  --dtype float16 \
+  --gpu-memory-utilization 0.25 \
+  --max-model-len 2048 \
+  --max-num-seqs 4 \
+  --max-num-batched-tokens 2048 \
+  --tensor-parallel-size 1
+```
+
+Despite its name, `--gpu-memory-utilization` controls the fraction of system memory reserved by
+the vLLM CPU backend. The 25% setting prevents the smoke server from claiming nearly all unified
+memory on a 16 GiB Mac.
 
 The flags correspond to:
 
@@ -87,6 +137,8 @@ workers. Performance comparison belongs to the later benchmark phases.
 
 - A failed model download is an environment or access problem, not an embedding-client failure.
 - An out-of-memory error should first be investigated by reducing sequence and batch limits.
+- On the CPU backend, also lower `--gpu-memory-utilization` when startup requests more system
+  memory than is currently available.
 - A connection error before `/health` succeeds is a server-startup problem.
 - An invalid `/v1/embeddings` response is an adapter-contract problem and should be reproducible
   through `embedding-lab verify`.

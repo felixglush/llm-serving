@@ -2,7 +2,6 @@
 name = "embedding-serving-lab"
 version = "0.1.0"
 description = "A provider-portable lab for embedding serving experiments."
-readme = "README.md"
 requires-python = ">=3.13"
 dependencies = []
 

@@ -14,8 +14,8 @@ class BenchmarkResult:
     """Measured outcomes from successful and failed requests.
 
     Latencies are successful-request percentiles. ``None`` means there were no successful
-    requests, so callers cannot accidentally read a fabricated zero. Token throughput is also
-    optional because some providers do not return usage information.
+    requests, so callers cannot accidentally read a fabricated zero. Input tokens are the
+    embedding server's reported usage for successful requests, not generated output tokens.
     """
 
     successful_requests: int
@@ -24,10 +24,8 @@ class BenchmarkResult:
     p95_latency_ms: float | None
     p99_latency_ms: float | None
     vectors_per_second: float
-    tokens_per_second: float | None
     elapsed_seconds: float
-    actual_input_tokens: int | None
-    estimated_input_tokens: int
+    input_tokens: int
     errors: tuple[str, ...] = ()
     warmup_requests: int = 0
 
@@ -35,21 +33,22 @@ class BenchmarkResult:
         for name, value in (
             ("successful_requests", self.successful_requests),
             ("failed_requests", self.failed_requests),
-            ("estimated_input_tokens", self.estimated_input_tokens),
             ("warmup_requests", self.warmup_requests),
         ):
             if value < 0:
                 raise ValueError(f"{name} must not be negative")
-        if self.actual_input_tokens is not None and self.actual_input_tokens < 0:
-            raise ValueError("actual_input_tokens must not be negative when provided")
+        if not isinstance(self.input_tokens, int) or isinstance(self.input_tokens, bool):
+            raise ValueError("input_tokens must be a reported integer")
+        if self.input_tokens < 0:
+            raise ValueError("input_tokens must not be negative")
+        if self.successful_requests > 0 and self.input_tokens == 0:
+            raise ValueError("successful requests require reported input tokens")
+        if self.successful_requests == 0 and self.input_tokens != 0:
+            raise ValueError("input_tokens must be zero when no requests succeeded")
         if not math.isfinite(self.elapsed_seconds) or self.elapsed_seconds <= 0:
             raise ValueError("elapsed_seconds must be positive and finite")
         if not math.isfinite(self.vectors_per_second) or self.vectors_per_second < 0:
             raise ValueError("vectors_per_second must be finite and non-negative")
-        if self.tokens_per_second is not None and (
-            not math.isfinite(self.tokens_per_second) or self.tokens_per_second < 0
-        ):
-            raise ValueError("tokens_per_second must be finite and non-negative when provided")
         _validate_percentile("p50_latency_ms", self.p50_latency_ms)
         _validate_percentile("p95_latency_ms", self.p95_latency_ms)
         _validate_percentile("p99_latency_ms", self.p99_latency_ms)
@@ -82,7 +81,7 @@ class BenchmarkResult:
         return self.failed_requests / self.total_requests
 
     @property
-    def token_count_source(self) -> str:
-        if self.actual_input_tokens is None:
-            return "unavailable"
-        return "reported"
+    def tokens_per_second(self) -> float:
+        """Reported embedding input tokens divided by measured wall time."""
+
+        return self.input_tokens / self.elapsed_seconds

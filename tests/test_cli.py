@@ -43,6 +43,13 @@ def test_vllm_verify_requires_an_endpoint(
     assert "--base-url or EMBEDDING_BASE_URL is required" in capsys.readouterr().err
 
 
+def test_vllm_experiment_requires_an_immutable_revision(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit, match="2"):
+        main(["experiment", "--service", "vllm", "--base-url", "https://example.test"])
+
+    assert "--revision is required for a persisted vllm experiment" in capsys.readouterr().err
+
+
 def test_deploy_command_reports_the_modal_endpoint(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -1,7 +1,6 @@
 """Publish local experiment records to W&B Runs and Artifacts."""
 
 import os
-from pathlib import Path
 from typing import Any
 
 from embedding_lab.application.experiments import (

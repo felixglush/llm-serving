@@ -191,8 +191,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         except ValueError as error:
             experiment_parser.error(str(error))
         revision = args.revision or ("synthetic" if args.service == "fake" else None)
-        if args.publish and revision is None:
-            experiment_parser.error("--revision is required when publishing a live experiment")
+        if revision is None:
+            experiment_parser.error("--revision is required for a persisted vllm experiment")
         benchmark_result = asyncio.run(_run_benchmark(args, workload))
         experiment = Experiment(
             experiment_id=new_experiment_id(),

@@ -7,9 +7,14 @@ import os
 from collections.abc import Sequence
 
 import uvicorn
+from prometheus_client import CollectorRegistry
 
 from gateway.adapters.fastapi_http import create_app
 from gateway.adapters.httpx_backend import HttpxBackendClient
+from gateway.adapters.prometheus_metrics import (
+    PrometheusGatewayTelemetry,
+    install_metrics_endpoint,
+)
 from gateway.application import Gateway
 from gateway.domain import BackendId
 from gateway.routing import BackendPool, RoundRobinSelection
@@ -73,8 +78,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         )
 
+    registry = CollectorRegistry()
+    telemetry = PrometheusGatewayTelemetry(
+        registry=registry,
+        policy="round_robin",
+        backend_ids=tuple(backend_urls),
+    )
     pool = BackendPool(clients, RoundRobinSelection())
-    gateway = Gateway(model=args.model, dimensions=args.dimensions, pool=pool)
+    gateway = Gateway(
+        model=args.model,
+        dimensions=args.dimensions,
+        pool=pool,
+        telemetry=telemetry,
+    )
     request_logger = logging.getLogger("gateway.requests")
     request_logger.setLevel(logging.INFO)
     request_logger.propagate = False
@@ -85,7 +101,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     app = create_app(
         gateway=gateway,
         request_timeout_seconds=args.request_timeout_seconds,
+        telemetry=telemetry,
     )
+    install_metrics_endpoint(app, registry=registry)
     uvicorn.run(app, host=args.host, port=args.port, workers=1)
     return 0
 

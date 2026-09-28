@@ -3,6 +3,7 @@
 import asyncio
 import json
 import math
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from model_server_simulator.ports import EmbeddingService
+from model_server_simulator.telemetry import NoopSimulatorTelemetry, SimulatorTelemetry
 
 MAX_REQUEST_BYTES = 1_048_576
 MAX_INPUT_ITEMS = 256
@@ -66,10 +68,16 @@ class ModelServerSimulatorSettings:
             raise ValueError("injected_error_status must be an HTTP 5xx status")
 
 
-def create_app(settings: ModelServerSimulatorSettings, service: EmbeddingService) -> FastAPI:
+def create_app(
+    settings: ModelServerSimulatorSettings,
+    service: EmbeddingService,
+    *,
+    telemetry: SimulatorTelemetry | None = None,
+) -> FastAPI:
     """Create a small OpenAI-subset app backed by deterministic synthetic vectors."""
 
     app = FastAPI()
+    request_telemetry = telemetry or NoopSimulatorTelemetry()
     active_requests = 0
     accepted_requests = 0
     active_requests_lock = asyncio.Lock()
@@ -77,70 +85,104 @@ def create_app(settings: ModelServerSimulatorSettings, service: EmbeddingService
     @app.post("/v1/embeddings")
     async def create_embeddings(request: Request) -> JSONResponse:
         nonlocal accepted_requests, active_requests
-
-        payload, body_error = await _read_json(request, settings.backend_id)
-        if body_error is not None:
-            return body_error
-
-        if not isinstance(payload, dict):
-            return _bad_request("request body must be a JSON object", settings.backend_id)
-        if payload.get("model") != settings.model:
-            return _bad_request("model must match the configured model", settings.backend_id)
-
-        texts = payload.get("input")
-        if not isinstance(texts, list) or not texts:
-            return _bad_request("input must be a nonempty list of strings", settings.backend_id)
-        if any(not isinstance(text, str) for text in texts):
-            return _bad_request("input must be a nonempty list of strings", settings.backend_id)
-        if len(texts) > MAX_INPUT_ITEMS:
-            return _bad_request(
-                f"input must contain at most {MAX_INPUT_ITEMS} items", settings.backend_id
-            )
-        if any(len(text) > MAX_TEXT_LENGTH for text in texts):
-            return _bad_request(
-                f"each input string must contain at most {MAX_TEXT_LENGTH} characters",
-                settings.backend_id,
-            )
-        if payload.get("encoding_format") != "float":
-            return _bad_request('encoding_format must be "float"', settings.backend_id)
-
-        async with active_requests_lock:
-            if active_requests >= settings.max_concurrency:
-                return _capacity_exhausted(settings.backend_id)
-            active_requests += 1
-            accepted_requests += 1
-            inject_failure = (
-                settings.fail_every_n_requests is not None
-                and accepted_requests % settings.fail_every_n_requests == 0
-            )
+        started = time.monotonic()
+        outcome = "internal_error"
+        request_telemetry.request_received()
         try:
-            await asyncio.sleep(settings.delay_seconds)
-            if inject_failure:
-                return _injected_error(settings)
-            result = await service.embed(texts)
-        finally:
-            async with active_requests_lock:
-                active_requests -= 1
+            payload, body_error = await _read_json(request, settings.backend_id)
+            if body_error is not None:
+                outcome = (
+                    "request_too_large" if body_error.status_code == 413 else "invalid_request"
+                )
+                request_telemetry.request_rejected(reason=outcome)
+                return body_error
 
-        return JSONResponse(
-            content={
-                "object": "list",
-                "model": settings.model,
-                "data": [
-                    {
-                        "object": "embedding",
-                        "index": index,
-                        "embedding": list(embedding.values),
-                    }
-                    for index, embedding in enumerate(result.embeddings)
-                ],
-                "usage": {
-                    "prompt_tokens": result.input_tokens,
-                    "total_tokens": result.input_tokens,
-                },
-            },
-            headers={"X-Backend-ID": settings.backend_id},
-        )
+            if not isinstance(payload, dict):
+                outcome = "invalid_request"
+                request_telemetry.request_rejected(reason=outcome)
+                return _bad_request("request body must be a JSON object", settings.backend_id)
+            if payload.get("model") != settings.model:
+                outcome = "invalid_request"
+                request_telemetry.request_rejected(reason=outcome)
+                return _bad_request("model must match the configured model", settings.backend_id)
+
+            texts = payload.get("input")
+            if not isinstance(texts, list) or not texts:
+                outcome = "invalid_request"
+                request_telemetry.request_rejected(reason=outcome)
+                return _bad_request("input must be a nonempty list of strings", settings.backend_id)
+            if any(not isinstance(text, str) for text in texts):
+                outcome = "invalid_request"
+                request_telemetry.request_rejected(reason=outcome)
+                return _bad_request("input must be a nonempty list of strings", settings.backend_id)
+            if len(texts) > MAX_INPUT_ITEMS:
+                outcome = "invalid_request"
+                request_telemetry.request_rejected(reason=outcome)
+                return _bad_request(
+                    f"input must contain at most {MAX_INPUT_ITEMS} items", settings.backend_id
+                )
+            if any(len(text) > MAX_TEXT_LENGTH for text in texts):
+                outcome = "invalid_request"
+                request_telemetry.request_rejected(reason=outcome)
+                return _bad_request(
+                    f"each input string must contain at most {MAX_TEXT_LENGTH} characters",
+                    settings.backend_id,
+                )
+            if payload.get("encoding_format") != "float":
+                outcome = "invalid_request"
+                request_telemetry.request_rejected(reason=outcome)
+                return _bad_request('encoding_format must be "float"', settings.backend_id)
+
+            async with active_requests_lock:
+                if active_requests >= settings.max_concurrency:
+                    outcome = "capacity_exhausted"
+                    request_telemetry.request_rejected(reason=outcome)
+                    return _capacity_exhausted(settings.backend_id)
+                active_requests += 1
+                accepted_requests += 1
+                inject_failure = (
+                    settings.fail_every_n_requests is not None
+                    and accepted_requests % settings.fail_every_n_requests == 0
+                )
+            request_telemetry.work_started()
+            try:
+                await asyncio.sleep(settings.delay_seconds)
+                if inject_failure:
+                    outcome = "injected_error"
+                    return _injected_error(settings)
+                result = await service.embed(texts)
+                outcome = "succeeded"
+                return JSONResponse(
+                    content={
+                        "object": "list",
+                        "model": settings.model,
+                        "data": [
+                            {
+                                "object": "embedding",
+                                "index": index,
+                                "embedding": list(embedding.values),
+                            }
+                            for index, embedding in enumerate(result.embeddings)
+                        ],
+                        "usage": {
+                            "prompt_tokens": result.input_tokens,
+                            "total_tokens": result.input_tokens,
+                        },
+                    },
+                    headers={"X-Backend-ID": settings.backend_id},
+                )
+            finally:
+                async with active_requests_lock:
+                    active_requests -= 1
+                request_telemetry.work_completed()
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        finally:
+            request_telemetry.request_completed(
+                outcome=outcome,
+                duration_seconds=time.monotonic() - started,
+            )
 
     @app.get("/health")
     async def health() -> dict[str, object]:

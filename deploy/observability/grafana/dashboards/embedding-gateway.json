@@ -1,0 +1,117 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{"expr": "sum(rate(gateway_embedding_requests_received_total[1m]))", "legendFormat": "incoming", "refId": "A"}],
+      "title": "Incoming request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+      "id": 2,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{"expr": "sum(rate(gateway_embedding_requests_completed_total[1m])) by (outcome)", "legendFormat": "{{outcome}}", "refId": "A"}],
+      "title": "Completed request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+      "id": 3,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{"expr": "sum(rate(gateway_embedding_requests_rejected_total[1m])) by (reason)", "legendFormat": "{{reason}}", "refId": "A"}],
+      "title": "Rejected request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 4,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{"expr": "sum(rate(gateway_backend_selections_total[1m])) by (backend)", "legendFormat": "{{backend}}", "refId": "A"}],
+      "title": "Backend traffic share",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 5,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{"expr": "gateway_upstream_requests_outstanding", "legendFormat": "{{backend}}", "refId": "A"}],
+      "title": "Outstanding upstream requests",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "id": 6,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum(rate(gateway_embedding_request_duration_seconds_bucket[1m])) by (le))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum(rate(gateway_embedding_request_duration_seconds_bucket[1m])) by (le))", "legendFormat": "p95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum(rate(gateway_embedding_request_duration_seconds_bucket[1m])) by (le))", "legendFormat": "p99", "refId": "C"}
+      ],
+      "title": "Gateway latency percentiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 7,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum(rate(gateway_upstream_request_duration_seconds_bucket[1m])) by (le, backend))", "legendFormat": "p50 {{backend}}", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum(rate(gateway_upstream_request_duration_seconds_bucket[1m])) by (le, backend))", "legendFormat": "p95 {{backend}}", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum(rate(gateway_upstream_request_duration_seconds_bucket[1m])) by (le, backend))", "legendFormat": "p99 {{backend}}", "refId": "C"}
+      ],
+      "title": "Upstream latency percentiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "id": 8,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [{"expr": "sum(rate(gateway_embedding_requests_completed_total{outcome=~\"deadline_exceeded|upstream_unavailable|invalid_upstream_response|internal_error\"}[1m])) by (outcome)", "legendFormat": "{{outcome}}", "refId": "A"}],
+      "title": "Timeout and error rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "id": 9,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {"expr": "model_server_simulator_active_requests", "legendFormat": "active {{backend}}", "refId": "A"},
+        {"expr": "model_server_simulator_configured_capacity", "legendFormat": "capacity {{backend}}", "refId": "B"}
+      ],
+      "title": "Simulator active work and capacity",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 41,
+  "tags": ["embedding", "gateway", "prometheus"],
+  "templating": {"list": []},
+  "time": {"from": "now-15m", "to": "now"},
+  "timezone": "browser",
+  "title": "Embedding Gateway Traffic",
+  "uid": "embedding-gateway-traffic",
+  "version": 1
+}

@@ -1,0 +1,145 @@
+name: llm-serving-observability
+
+services:
+  simulator-a:
+    build:
+      context: ../../services/model-server-simulator
+    command:
+      - --backend-id
+      - backend-a
+      - --model
+      - lab-embedding
+      - --dimensions
+      - "8"
+      - --delay-seconds
+      - "0.02"
+      - --max-concurrency
+      - "8"
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    ports:
+      - 127.0.0.1:${BACKEND_A_PORT:-8101}:8000
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=1)
+      interval: 1s
+      timeout: 2s
+      retries: 30
+
+  simulator-b:
+    build:
+      context: ../../services/model-server-simulator
+    command:
+      - --backend-id
+      - backend-b
+      - --model
+      - lab-embedding
+      - --dimensions
+      - "8"
+      - --delay-seconds
+      - "2.0"
+      - --max-concurrency
+      - "8"
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    ports:
+      - 127.0.0.1:${BACKEND_B_PORT:-8102}:8000
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=1)
+      interval: 1s
+      timeout: 2s
+      retries: 30
+
+  gateway:
+    build:
+      context: ../../services/gateway
+    command:
+      - --backend
+      - backend-a=http://simulator-a:8000
+      - --backend
+      - backend-b=http://simulator-b:8000
+      - --model
+      - lab-embedding
+      - --dimensions
+      - "8"
+      - --request-timeout-seconds
+      - "10"
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    ports:
+      - 127.0.0.1:${GATEWAY_PORT:-8000}:8000
+    depends_on:
+      simulator-a:
+        condition: service_healthy
+      simulator-b:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2)
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=1h
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - 127.0.0.1:${PROMETHEUS_PORT:-9090}:9090
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - -O
+        - /dev/null
+        - http://127.0.0.1:9090/-/ready
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  grafana:
+    image: grafana/grafana:13.2.1
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - 127.0.0.1:${GRAFANA_PORT:-3000}:3000
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - http://127.0.0.1:3000/api/health
+      interval: 1s
+      timeout: 3s
+      retries: 30

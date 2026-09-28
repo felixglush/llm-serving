@@ -24,15 +24,24 @@ from gateway.failures import (
     UnknownModel,
     UpstreamUnavailable,
 )
+from gateway.telemetry import GatewayTelemetry, NoopGatewayTelemetry
 
 LOGGER = logging.getLogger("gateway.requests")
 MAX_REQUEST_BYTES = 1_048_576
 MAX_INPUT_ITEMS = 256
 MAX_TEXT_LENGTH = 8_192
+EMBEDDINGS_ROUTE = "/v1/embeddings"
 
 
-def create_app(*, gateway: Gateway, request_timeout_seconds: float) -> FastAPI:
+def create_app(
+    *,
+    gateway: Gateway,
+    request_timeout_seconds: float,
+    telemetry: GatewayTelemetry | None = None,
+) -> FastAPI:
     """Create the public HTTP adapter around one gateway use case."""
+
+    request_telemetry = telemetry or NoopGatewayTelemetry()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -41,13 +50,14 @@ def create_app(*, gateway: Gateway, request_timeout_seconds: float) -> FastAPI:
 
     app = FastAPI(lifespan=lifespan)
 
-    @app.post("/v1/embeddings")
+    @app.post(EMBEDDINGS_ROUTE)
     async def create_embeddings(request: Request) -> JSONResponse:
         request_id = str(uuid.uuid4())
         started = time.monotonic()
         deadline = asyncio.get_running_loop().time() + request_timeout_seconds
         backend_id: str | None = None
-        outcome = "failed"
+        outcome = "internal_error"
+        request_telemetry.request_received(route=EMBEDDINGS_ROUTE)
         try:
             async with asyncio.timeout_at(deadline):
                 payload = await _read_json(request)
@@ -61,11 +71,25 @@ def create_app(*, gateway: Gateway, request_timeout_seconds: float) -> FastAPI:
             failure = DeadlineExceeded(backend_id=backend_id)
             outcome = failure.code
             return _error_response(failure, request_id=request_id)
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
         except GatewayFailure as failure:
             backend_id = failure.backend_id
             outcome = failure.code
+            if isinstance(failure, (InvalidRequest, RequestTooLarge, UnknownModel)):
+                request_telemetry.request_rejected(
+                    route=EMBEDDINGS_ROUTE,
+                    reason=failure.code,
+                )
             return _error_response(failure, request_id=request_id)
         finally:
+            duration_seconds = time.monotonic() - started
+            request_telemetry.request_completed(
+                route=EMBEDDINGS_ROUTE,
+                outcome=outcome,
+                duration_seconds=duration_seconds,
+            )
             LOGGER.info(
                 json.dumps(
                     {
@@ -73,7 +97,7 @@ def create_app(*, gateway: Gateway, request_timeout_seconds: float) -> FastAPI:
                         "request_id": request_id,
                         "backend_id": backend_id,
                         "outcome": outcome,
-                        "duration_seconds": time.monotonic() - started,
+                        "duration_seconds": duration_seconds,
                     },
                     separators=(",", ":"),
                     sort_keys=True,

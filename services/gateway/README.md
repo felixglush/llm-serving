@@ -23,7 +23,9 @@ outstanding counts. It cannot access URLs, credentials, request bodies, or HTTP 
 
 The FastAPI adapter owns request parsing and HTTP error mapping. The HTTPX adapter owns backend
 credentials, connection reuse, safe outbound headers, and response validation. The composition root
-in `main.py` is the only module that selects concrete adapters.
+in `main.py` is the only module that selects concrete adapters. The application depends on a small
+telemetry protocol. The Prometheus adapter implements that protocol without adding Prometheus types
+to routing or domain code.
 
 ## Run locally
 
@@ -91,3 +93,11 @@ backend responses use `502`, unavailable backends use `503`, and overall deadlin
 
 Completion logs are JSON on standard error. They contain request ID, configured backend ID, outcome,
 and duration. They do not contain request text, vectors, URLs, or credentials.
+
+Prometheus metrics are available at `/metrics`. They record bounded routes, outcomes, rejection
+reasons, configured backend IDs, and the routing policy. Request IDs, input text, model strings,
+URLs, credentials, and error messages are not metric labels. Gateway duration includes request body
+upload. Upstream duration includes HTTP transport, backend waiting, and response validation.
+
+The [local observability stack](../../deploy/observability/README.md) runs this service with two
+simulators, Prometheus, and a provisioned Grafana dashboard.

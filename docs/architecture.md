@@ -35,8 +35,8 @@ concurrency or input-length sweep reuses the same endpoint instead of silently c
 
 Deployable processes live under `services/`, with their package manifest, container definition,
 operating guide, source, and tests colocated. The existing `embedding_lab` package remains the
-provider-portable research client; future gateway code belongs in a sibling
-`services/gateway/` package rather than in the lab's model-deployment adapters.
+provider-portable research client. Gateway code lives in the sibling `services/gateway/` package,
+not in the lab's model-deployment adapters.
 
 ```text
                          HTTP
@@ -106,3 +106,23 @@ outward adapters. The composition root selects concrete adapters and the round-r
 `BackendPool` keeps selection and reservation in one short critical section, but never holds its
 lock during network I/O. This prepares the strategy seam for least-outstanding selection without
 exposing reservation lifecycle to HTTP handlers.
+
+### Local observability
+
+The gateway and each simulator expose Prometheus metrics through their own HTTP adapter. The
+application code depends on a small telemetry protocol. It does not import the Prometheus client.
+The process composition root selects the Prometheus adapter and its process-local registry.
+
+```text
+client -> gateway -> simulator A
+                  -> simulator B
+
+gateway /metrics -----+
+simulator A /metrics --+--> Prometheus <-- Grafana
+simulator B /metrics --+
+```
+
+Prometheus pulls metrics through the Docker network. Grafana queries Prometheus. Request IDs stay
+in JSON logs and do not become metric labels. Simulator identity is a Prometheus target label. The
+simulator does not repeat deployment identity on every metric. See the
+[local observability stack](../deploy/observability/README.md).

@@ -4,8 +4,13 @@ import argparse
 from collections.abc import Sequence
 
 import uvicorn
+from prometheus_client import CollectorRegistry
 
 from model_server_simulator.http_server import ModelServerSimulatorSettings, create_app
+from model_server_simulator.prometheus_metrics import (
+    PrometheusSimulatorTelemetry,
+    install_metrics_endpoint,
+)
 from model_server_simulator.synthetic_model import SyntheticEmbeddingService
 
 
@@ -41,7 +46,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error(str(error))
 
     service = SyntheticEmbeddingService(dimensions=settings.dimensions)
-    app = create_app(settings, service)
+    registry = CollectorRegistry()
+    telemetry = PrometheusSimulatorTelemetry(
+        registry=registry,
+        configured_capacity=settings.max_concurrency,
+    )
+    app = create_app(settings, service, telemetry=telemetry)
+    install_metrics_endpoint(app, registry=registry)
     # Capacity and deterministic request ordinals are process-local, so this
     # learning server intentionally runs a single worker.
     uvicorn.run(app, host=args.host, port=args.port, workers=1)

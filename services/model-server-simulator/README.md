@@ -54,6 +54,11 @@ curl --fail http://127.0.0.1:8101/health
 curl --fail http://127.0.0.1:8102/health
 ```
 
+Each process also exposes Prometheus metrics at `/metrics`. Metrics show request outcomes, rejected
+work, request duration, active work, and configured capacity. Backend identity is set as a
+Prometheus scrape-target label in the local observability stack. It is not repeated by the
+application on every time series.
+
 Send an embedding request:
 
 ```bash
@@ -108,3 +113,6 @@ different backend ID. The explicit `127.0.0.1` publishes this unauthenticated le
 to the laptop, while `--host 0.0.0.0` lets Uvicorn accept traffic inside the container. Each
 container intentionally runs one Uvicorn worker because capacity and deterministic fault counters
 are process-local.
+
+The [local observability stack](../../deploy/observability/README.md) builds two simulator
+containers and connects them to the gateway, Prometheus, and Grafana through Docker service names.

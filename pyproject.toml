@@ -35,6 +35,9 @@ members = ["services/*"]
 addopts = "-ra"
 asyncio_mode = "auto"
 testpaths = ["tests", "services"]
+markers = [
+    "observability_e2e: real Docker Compose acceptance test for Prometheus and Grafana",
+]
 
 [tool.ruff]
 line-length = 100

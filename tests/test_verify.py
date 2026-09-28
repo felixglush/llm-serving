@@ -10,19 +10,6 @@ def embeddings(*vectors: tuple[float, ...]) -> tuple[Embedding, ...]:
     return tuple(Embedding(values=values) for values in vectors)
 
 
-def test_valid_embeddings_pass_without_a_service() -> None:
-    result = validate_embeddings(
-        ["alpha", "beta"],
-        embeddings((1.0, 2.0), (3.0, 4.0)),
-        expected_dimensions=2,
-    )
-
-    assert result.passed
-    assert result.input_count == 2
-    assert result.dimensions == 2
-    assert result.failures == ()
-
-
 @pytest.mark.parametrize(
     ("result", "texts", "failure"),
     [

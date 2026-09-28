@@ -54,23 +54,6 @@ def test_domain_objects_reject_invalid_values(factory: object, message: str) -> 
         factory()  # type: ignore[operator]
 
 
-def test_all_failed_result_has_no_fake_latency() -> None:
-    result = BenchmarkResult(
-        successful_requests=0,
-        failed_requests=2,
-        p50_latency_ms=None,
-        p95_latency_ms=None,
-        p99_latency_ms=None,
-        vectors_per_second=0.0,
-        elapsed_seconds=0.1,
-        input_tokens=0,
-    )
-
-    assert result.p95_latency_ms is None
-    assert result.tokens_per_second == 0.0
-    assert result.failure_rate == 1.0
-
-
 @pytest.mark.parametrize(
     ("successful_requests", "p50", "p95", "p99"),
     [

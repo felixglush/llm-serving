@@ -1,11 +1,11 @@
-"""Provider-neutral embedding responses with request-level input-token usage."""
+"""Provider-neutral embedding responses used by research clients."""
 
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
 class Embedding:
-    """One vector in input order; correctness is checked by the verification use case."""
+    """One vector in input order."""
 
     values: tuple[float, ...]
 

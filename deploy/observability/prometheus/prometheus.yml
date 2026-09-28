@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 1s
+  evaluation_interval: 1s
+
+scrape_configs:
+  - job_name: gateway
+    static_configs:
+      - targets: [gateway:8000]
+        labels:
+          service: gateway
+
+  - job_name: model-server-simulator
+    static_configs:
+      - targets: [simulator-a:8000]
+        labels:
+          backend: backend-a
+          service: model-server-simulator
+      - targets: [simulator-b:8000]
+        labels:
+          backend: backend-b
+          service: model-server-simulator

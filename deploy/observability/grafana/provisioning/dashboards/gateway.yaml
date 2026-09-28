@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: embedding-gateway
+    orgId: 1
+    folder: Embedding Gateway
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 5
+    options:
+      path: /var/lib/grafana/dashboards

@@ -4,23 +4,20 @@ import hashlib
 import json
 import re
 import sys
-from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from embedding_lab.adapters.vllm.runtime import VllmEngineConfig
-from embedding_lab.domain.deployment import Deployment
-from embedding_lab.domain.model import ModelConfig
-from embedding_lab.domain.topology import ReplicaTopology
+from model_server.domain import Deployment, ModelConfig, ReplicaTopology
+from model_server.runtime import VllmEngineConfig
 
 
 @dataclass(frozen=True, slots=True)
 class ModalDeploymentSettings:
     """Modal- and vLLM-specific settings for one serving configuration."""
 
-    app_prefix: str = "embedding-lab"
+    app_prefix: str = "model-server"
     gpu_type: str = "L4"
-    vllm_version: str = "0.29.0"
+    vllm_version: str = "0.30.0"
     python_version: str = "3.13"
     container_concurrency: int = 32
     max_num_seqs: int = 32
@@ -29,8 +26,8 @@ class ModalDeploymentSettings:
     min_containers: int = 0
     max_containers: int = 1
     startup_timeout_seconds: int = 900
-    huggingface_cache_volume: str = "embedding-lab-huggingface-cache"
-    vllm_cache_volume: str = "embedding-lab-vllm-cache"
+    huggingface_cache_volume: str = "model-server-huggingface-cache"
+    vllm_cache_volume: str = "model-server-vllm-cache"
 
     def __post_init__(self) -> None:
         for name in (
@@ -63,7 +60,7 @@ class ModalDeploymentSettings:
         if self.min_containers not in (0, 1):
             raise ValueError("min_containers must be zero or one")
         if self.max_containers != 1:
-            raise ValueError("Stage 6 requires max_containers=1")
+            raise ValueError("model-server requires max_containers=1")
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,11 +88,8 @@ class ModalDeploymentBackend:
     def __init__(
         self,
         settings: ModalDeploymentSettings | None = None,
-        *,
-        deployer: Callable[[ModalDeploymentPlan], str] | None = None,
     ) -> None:
         self._settings = settings or ModalDeploymentSettings()
-        self._deployer = deployer or _deploy_to_modal
 
     def deploy(
         self,
@@ -105,7 +99,7 @@ class ModalDeploymentBackend:
         """Deploy a planned app and return its provider-neutral identity."""
 
         plan = self.plan(model, topology)
-        endpoint_url = self._deployer(plan)
+        endpoint_url = _deploy_to_modal(plan)
         return Deployment(
             name=plan.app_name,
             endpoint_url=endpoint_url,
@@ -120,7 +114,7 @@ class ModalDeploymentBackend:
         """Return the concrete single-replica Modal plan without cloud I/O."""
 
         if topology != ReplicaTopology(replicas=1, tensor_parallel_size=1):
-            raise ValueError("Stage 6 supports exactly one replica on one worker")
+            raise ValueError("model-server supports exactly one replica on one worker")
         engine = VllmEngineConfig.from_topology(
             topology,
             max_model_len=model.max_sequence_length,
@@ -199,9 +193,10 @@ def build_modal_app(plan: ModalDeploymentPlan) -> tuple[Any, Any]:
             "Modal deployment requires the 'modal' extra: uv sync --extra modal"
         ) from error
 
-    image = modal.Image.debian_slim(
-        python_version=plan.python_version
-    ).uv_pip_install(f"vllm=={plan.vllm_version}")
+    image = modal.Image.from_registry(
+        f"vllm/vllm-openai:v{plan.vllm_version}",
+        add_python=plan.python_version,
+    ).entrypoint([])
     huggingface_cache = modal.Volume.from_name(
         plan.huggingface_cache_volume,
         create_if_missing=True,

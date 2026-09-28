@@ -1,7 +1,7 @@
 import pytest
 
-from embedding_lab.adapters.vllm.runtime import VllmEngineConfig
-from embedding_lab.domain.topology import ReplicaTopology
+from model_server.domain import ReplicaTopology
+from model_server.runtime import VllmEngineConfig
 
 
 def test_vllm_config_translates_topology_into_engine_arguments() -> None:

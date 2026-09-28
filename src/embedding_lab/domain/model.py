@@ -1,11 +1,11 @@
-"""Model identity and limits independent of a serving engine."""
+"""Model identity and limits used by research experiments."""
 
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
 class ModelConfig:
-    """A model and the limits the application expects it to honor."""
+    """A model and the limits the experiment expects it to honor."""
 
     model_id: str
     revision: str | None = None

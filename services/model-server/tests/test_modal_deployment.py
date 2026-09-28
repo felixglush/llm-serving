@@ -1,14 +1,13 @@
 import pytest
 
-import embedding_lab.adapters.modal.deployment as modal_deployment
-from embedding_lab.adapters.modal.deployment import (
+import model_server.modal_deployment as modal_deployment
+from model_server.domain import ModelConfig, ReplicaTopology
+from model_server.modal_deployment import (
     ModalDeploymentBackend,
     ModalDeploymentPlan,
     ModalDeploymentSettings,
     build_modal_app,
 )
-from embedding_lab.domain.model import ModelConfig
-from embedding_lab.domain.topology import ReplicaTopology
 
 
 def test_modal_plan_keeps_one_replica_on_one_gpu() -> None:
@@ -77,7 +76,7 @@ def test_each_serving_configuration_has_a_stable_distinct_identity() -> None:
     assert qwen.configuration_fingerprint == qwen_again.configuration_fingerprint
     assert other_revision.app_name != qwen.app_name
     assert other_model.app_name != qwen.app_name
-    assert qwen.app_name.startswith("embedding-lab-qwen-qwen3-embedding-0-6b-")
+    assert qwen.app_name.startswith("model-server-qwen-qwen3-embedding-0-6b-")
 
 
 @pytest.mark.parametrize(
@@ -87,15 +86,15 @@ def test_each_serving_configuration_has_a_stable_distinct_identity() -> None:
         ReplicaTopology(replicas=1, tensor_parallel_size=2),
     ],
 )
-def test_stage_six_rejects_topologies_it_cannot_yet_provision(
+def test_service_rejects_topologies_it_cannot_yet_provision(
     topology: ReplicaTopology,
 ) -> None:
-    with pytest.raises(ValueError, match="Stage 6 supports exactly one replica on one worker"):
+    with pytest.raises(ValueError, match="model-server supports exactly one replica on one worker"):
         ModalDeploymentBackend().plan(ModelConfig("model"), topology)
 
 
 @pytest.mark.parametrize("gpu_type", ["L4:2", "L4:1", "L4,L4"])
-def test_stage_six_rejects_multi_gpu_resource_syntax(gpu_type: str) -> None:
+def test_service_rejects_multi_gpu_resource_syntax(gpu_type: str) -> None:
     with pytest.raises(ValueError, match="gpu_type must name one GPU type"):
         ModalDeploymentSettings(gpu_type=gpu_type)
 
@@ -131,45 +130,35 @@ def test_unpinned_model_does_not_pass_a_revision_flag() -> None:
     assert "--revision" not in plan.command
 
 
-def test_deploy_uses_the_modal_url_without_printing_progress(
+def test_deploy_returns_modal_endpoint_for_the_planned_configuration(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    captured_plans: list[ModalDeploymentPlan] = []
+    deploy_calls: list[tuple[str, str]] = []
+
     class FakeApp:
         def deploy(self, *, name: str, strategy: str) -> None:
-            assert name == plan.app_name
-            assert strategy == "recreate"
+            deploy_calls.append((name, strategy))
 
     class FakeWebFunction:
         def get_web_url(self) -> str:
             return "https://example--embeddings.modal.run"
 
     def fake_build(plan: ModalDeploymentPlan) -> tuple[FakeApp, FakeWebFunction]:
+        captured_plans.append(plan)
         return FakeApp(), FakeWebFunction()
 
     monkeypatch.setattr(modal_deployment, "build_modal_app", fake_build)
-    plan = ModalDeploymentBackend().plan(ModelConfig("model"), ReplicaTopology())
-
-    assert modal_deployment._deploy_to_modal(plan) == "https://example--embeddings.modal.run"
-    assert capsys.readouterr().out == ""
-
-
-def test_deploy_returns_the_endpoint_for_the_planned_configuration() -> None:
-    captured: list[ModalDeploymentPlan] = []
-
-    def deploy_plan(plan: ModalDeploymentPlan) -> str:
-        captured.append(plan)
-        return "https://example--embeddings.modal.run"
-
-    backend = ModalDeploymentBackend(deployer=deploy_plan)
-
-    result = backend.deploy(
+    result = ModalDeploymentBackend().deploy(
         ModelConfig("Qwen/Qwen3-Embedding-0.6B", revision="revision-a"),
         ReplicaTopology(),
     )
 
-    assert result.name == captured[0].app_name
-    assert result.configuration_fingerprint == captured[0].configuration_fingerprint
+    assert result.name == captured_plans[0].app_name
+    assert result.configuration_fingerprint == captured_plans[0].configuration_fingerprint
     assert result.endpoint_url == "https://example--embeddings.modal.run"
+    assert deploy_calls == [(captured_plans[0].app_name, "recreate")]
+    assert capsys.readouterr().out == ""
 
 
 def test_modal_app_can_be_constructed_without_deploying() -> None:

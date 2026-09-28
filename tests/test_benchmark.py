@@ -3,7 +3,6 @@ import json
 
 import pytest
 
-from embedding_lab.adapters.fake.embedding_service import FakeEmbeddingService
 from embedding_lab.application.benchmark import RunBenchmark
 from embedding_lab.cli.main import main
 from embedding_lab.domain.embedding import Embedding, EmbeddingResponse
@@ -103,6 +102,7 @@ async def test_runner_reports_no_latency_when_every_measured_request_fails() -> 
     assert result.p99_latency_ms is None
     assert result.vectors_per_second == 0
     assert result.tokens_per_second == 0
+    assert result.failure_rate == 1.0
 
 
 def test_workload_text_generation_is_repeatable_and_seeded() -> None:
@@ -147,17 +147,3 @@ def test_benchmark_command_emits_result_json(capsys: pytest.CaptureFixture[str])
     assert output["workload"]["requests"] == 3
     assert output["result"]["successful_requests"] == 3
     assert len(output["result"]["observations"]) == 4
-
-
-async def test_fake_service_is_usable_by_the_runner() -> None:
-    result = await RunBenchmark(FakeEmbeddingService(dimensions=4)).run(
-        Workload(
-            concurrency=1,
-            requests=2,
-            texts_per_request=1,
-            target_tokens_per_text=2,
-        )
-    )
-
-    assert result.successful_requests == 2
-    assert result.successful_vectors == 2

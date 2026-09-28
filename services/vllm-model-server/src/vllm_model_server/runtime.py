@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from embedding_lab.domain.topology import ReplicaTopology
+from vllm_model_server.domain import ReplicaTopology
 
 
 @dataclass(frozen=True, slots=True)

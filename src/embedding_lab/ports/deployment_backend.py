@@ -1,4 +1,4 @@
-"""Boundary implemented by infrastructure-specific deployment adapters."""
+"""Deployment boundary consumed by research workflows."""
 
 from typing import Protocol
 
@@ -10,8 +10,4 @@ from embedding_lab.domain.topology import ReplicaTopology
 class DeploymentBackend(Protocol):
     """Deploy one model using a provider-neutral replica topology."""
 
-    def deploy(
-        self,
-        model: ModelConfig,
-        topology: ReplicaTopology,
-    ) -> Deployment: ...
+    def deploy(self, model: ModelConfig, topology: ReplicaTopology) -> Deployment: ...

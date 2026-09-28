@@ -1,4 +1,4 @@
-"""Provider-neutral facts produced by a deployment backend."""
+"""Provider-neutral deployment results used by research workflows."""
 
 from dataclasses import dataclass
 

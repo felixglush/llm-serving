@@ -9,9 +9,9 @@ workloads reuse an existing deployment and therefore do not appear in the deploy
 Install the optional Modal adapter dependency:
 
 ```bash
-uv sync --extra modal
-uv run modal --version
-uv run modal token info
+uv sync --all-packages --extra modal
+uv run --package vllm-model-server modal --version
+uv run --package vllm-model-server modal token info
 ```
 
 Creating or updating a deployment allocates external cloud resources. Review the generated code and
@@ -23,7 +23,7 @@ Use an immutable model revision when recording reproducible experiments. `main` 
 can move and therefore does not uniquely identify downloaded weights.
 
 ```bash
-uv run embedding-lab deploy \
+uv run --package vllm-model-server vllm-model-server-deploy \
   --provider modal \
   --model Qwen/Qwen3-Embedding-0.6B \
   --revision main \
@@ -38,8 +38,8 @@ uv run embedding-lab deploy \
 ```
 
 The command prints JSON containing the deterministic app name, configuration fingerprint, and Modal
-endpoint URL. Stage 6 enforces one replica on one worker and `max_containers=1`; multi-replica and
-tensor-parallel deployments remain later stages.
+endpoint URL. The service currently enforces one replica on one worker and `max_containers=1`;
+multi-replica and tensor-parallel deployments remain later work.
 
 Modal may scale the deployment to zero because `min_containers` defaults to zero. The first request
 can therefore include model startup time. Warm the endpoint before measuring steady-state latency.

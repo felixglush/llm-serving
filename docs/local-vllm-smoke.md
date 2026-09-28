@@ -35,22 +35,22 @@ uv pip install --python .venv-vllm/bin/python vllm
 
 ### Apple Silicon CPU smoke testing
 
-The vLLM 0.29.0 CPU index includes a native CPython 3.12 wheel for Apple Silicon. Install the
+The vLLM 0.30.0 CPU index includes a native CPython 3.12 wheel for Apple Silicon. Install the
 versioned CPU build explicitly so resolution cannot select the regular GPU package from PyPI:
 
 ```bash
 uv pip install --python .venv-vllm/bin/python \
-  "vllm==0.29.0+cpu" \
-  --extra-index-url https://wheels.vllm.ai/0.29.0/cpu \
-  --index-strategy first-index \
-  --torch-backend cpu
+  "vllm==0.30.0+cpu" \
+  --extra-index-url https://wheels.vllm.ai/0.30.0/cpu \
+  --index-strategy unsafe-best-match
 
 .venv-vllm/bin/vllm --version
 ```
 
-This checkout was verified with `vllm 0.29.0+cpu`. The Apple Silicon wheel is CPU-only and validates
-compatibility, not GPU performance. The first server start downloads the model from Hugging Face,
-so confirm that the host has enough disk space and access to the model.
+This checkout was verified with `vllm 0.30.0+cpu` on an Apple Silicon Mac with 16 GiB of unified
+memory. The Apple Silicon wheel is CPU-only and validates compatibility, not GPU performance. The
+first server start downloads the model from Hugging Face, so confirm that the host has enough disk
+space and access to the model.
 
 ## 2. Start one replica on one GPU
 
@@ -76,16 +76,17 @@ On a 16 GiB Apple Silicon host, use this smaller CPU-only smoke profile:
   --host 127.0.0.1 \
   --port 8000 \
   --dtype float16 \
-  --gpu-memory-utilization 0.25 \
-  --max-model-len 2048 \
-  --max-num-seqs 4 \
-  --max-num-batched-tokens 2048 \
+  --gpu-memory-utilization 0.12 \
+  --max-model-len 1024 \
+  --max-num-seqs 2 \
+  --max-num-batched-tokens 1024 \
   --tensor-parallel-size 1
 ```
 
 Despite its name, `--gpu-memory-utilization` controls the fraction of system memory reserved by
-the vLLM CPU backend. The 25% setting prevents the smoke server from claiming nearly all unified
-memory on a 16 GiB Mac.
+the vLLM CPU backend. The 12% setting started successfully when the machine had about 2.6 GiB free;
+a 25% setting correctly refused to start because it requested about 4 GiB. These are smoke-test
+limits, not recommended production capacity.
 
 The flags correspond to:
 

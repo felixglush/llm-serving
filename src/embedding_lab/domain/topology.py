@@ -1,4 +1,4 @@
-"""Replica topology concepts shared by deployment adapters."""
+"""Replica topology concepts used by research experiments."""
 
 from dataclasses import dataclass
 

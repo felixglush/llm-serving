@@ -1,0 +1,113 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Embedding Service Contract",
+    "version": "1.0.0",
+    "description": "The OpenAI-compatible embedding subset consumed across service boundaries."
+  },
+  "paths": {
+    "/v1/embeddings": {
+      "post": {
+        "operationId": "createEmbedding",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/EmbeddingRequest"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ordered embeddings",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/EmbeddingResponse"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/Error"},
+          "413": {"$ref": "#/components/responses/Error"},
+          "429": {"$ref": "#/components/responses/Error"},
+          "503": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EmbeddingRequest": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["model", "input", "encoding_format"],
+        "properties": {
+          "model": {"type": "string", "minLength": 1},
+          "input": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string"}
+          },
+          "encoding_format": {"const": "float"}
+        }
+      },
+      "EmbeddingResponse": {
+        "type": "object",
+        "required": ["object", "model", "data", "usage"],
+        "properties": {
+          "object": {"const": "list"},
+          "model": {"type": "string"},
+          "data": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/EmbeddingItem"}
+          },
+          "usage": {"$ref": "#/components/schemas/Usage"}
+        }
+      },
+      "EmbeddingItem": {
+        "type": "object",
+        "required": ["object", "index", "embedding"],
+        "properties": {
+          "object": {"const": "embedding"},
+          "index": {"type": "integer", "minimum": 0},
+          "embedding": {
+            "type": "array",
+            "items": {"type": "number"}
+          }
+        }
+      },
+      "Usage": {
+        "type": "object",
+        "required": ["prompt_tokens", "total_tokens"],
+        "properties": {
+          "prompt_tokens": {"type": "integer", "minimum": 0},
+          "total_tokens": {"type": "integer", "minimum": 0}
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["message", "type", "code"],
+            "properties": {
+              "message": {"type": "string", "maxLength": 500},
+              "type": {"type": "string"},
+              "code": {"oneOf": [{"type": "string"}, {"type": "integer"}]}
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Bounded error envelope",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/ErrorEnvelope"}
+          }
+        }
+      }
+    }
+  }
+}

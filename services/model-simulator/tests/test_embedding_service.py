@@ -3,15 +3,15 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from embedding_lab.adapters.fake.embedding_service import FakeEmbeddingService
-from embedding_lab.domain.embedding import Embedding, EmbeddingResponse
-from embedding_lab.ports.embedding_service import EmbeddingService
+from model_simulator.domain import Embedding, EmbeddingResponse
+from model_simulator.ports import EmbeddingService
+from model_simulator.synthetic_model import SyntheticEmbeddingService
 
 
-async def test_fake_satisfies_port_preserves_order_and_is_stable() -> None:
-    service: EmbeddingService = FakeEmbeddingService(dimensions=5)
+async def test_synthetic_model_satisfies_port_preserves_order_and_is_stable() -> None:
+    service: EmbeddingService = SyntheticEmbeddingService(dimensions=5)
     response = await service.embed(["hello", "world", "hello", ""])
-    repeated = await FakeEmbeddingService(dimensions=5).embed(["hello"])
+    repeated = await SyntheticEmbeddingService(dimensions=5).embed(["hello"])
 
     assert len(response.embeddings) == 4
     assert response.embeddings[0] == response.embeddings[2] == repeated.embeddings[0]
@@ -24,14 +24,14 @@ async def test_fake_satisfies_port_preserves_order_and_is_stable() -> None:
 
 
 async def test_empty_batch_returns_no_vectors_or_tokens() -> None:
-    response = await FakeEmbeddingService().embed([])
+    response = await SyntheticEmbeddingService().embed([])
     assert response == EmbeddingResponse(embeddings=(), input_tokens=0)
 
 
 @pytest.mark.parametrize("dimensions", [0, -1, True])
-def test_fake_rejects_invalid_dimensions(dimensions: int) -> None:
+def test_synthetic_model_rejects_invalid_dimensions(dimensions: int) -> None:
     with pytest.raises(ValueError, match="dimensions"):
-        FakeEmbeddingService(dimensions=dimensions)
+        SyntheticEmbeddingService(dimensions=dimensions)
 
 
 def test_response_requires_request_level_input_tokens() -> None:

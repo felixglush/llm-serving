@@ -15,6 +15,7 @@ build/
 .env.*
 !.env.example
 /wandb/
+.agents/docs/
 
 # Local experiment output can be retained explicitly with git add -f.
 results/*

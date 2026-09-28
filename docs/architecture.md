@@ -13,9 +13,8 @@ The domain describes concepts such as a model, a replica topology, a workload, a
 result. It is pure Python and has no imports from Modal, vLLM, `httpx`, or any cloud SDK.
 
 Application use cases coordinate those concepts through small protocols in `ports/`. Adapters
-implement the protocols for a particular boundary: a deterministic fake for offline tests, an
-OpenAI-compatible vLLM HTTP client, or a Modal deployment definition. Entry points translate CLI
-arguments into application calls.
+implement the protocols for a particular boundary: an in-process deterministic test adapter or an
+OpenAI-compatible vLLM HTTP client. Entry points translate CLI arguments into application calls.
 
 The vLLM adapter also owns engine-specific scheduler settings. `ReplicaTopology` describes the
 portable shape of a deployment, while `VllmEngineConfig` turns the topology for one replica into
@@ -31,3 +30,61 @@ Each materially different serving configuration gets a deterministic deployment 
 identity includes the model revision, topology, vLLM scheduler settings, GPU type, image/runtime
 versions, and container concurrency. Benchmark workloads do not affect deployment identity, so a
 concurrency or input-length sweep reuses the same endpoint instead of silently changing the server.
+
+## Deployable services
+
+Deployable processes live under `services/`, with their package manifest, container definition,
+operating guide, source, and tests colocated. The existing `embedding_lab` package remains the
+provider-portable research client; future gateway code belongs in a sibling
+`services/embedding-gateway/` package rather than in the lab's model-deployment adapters.
+
+```text
+                         HTTP
+embedding_gateway  ------------------+
+embedding_lab      ----------------+  |
+                                     v  v
+                            /v1/embeddings
+                           contract version 1
+                              ^           ^
+                              |           |
+                 model-simulator      vllm-model-server
+                 synthetic process    real model process
+```
+
+There are no shared Python runtime packages between these components. Each process owns its domain
+objects, application ports, implementation, and dependencies. The shared artifact is the serialized
+HTTP promise in [`contracts/embeddings-v1.openapi.json`](../contracts/embeddings-v1.openapi.json),
+not FastAPI code or importable dataclasses. Clients translate that wire representation into their
+own application types.
+
+### Standalone model simulator
+
+The model simulator is a separate process, not part of the Modal or vLLM deployment adapter.
+Its composition root injects `SyntheticEmbeddingService` through its local `EmbeddingService` port
+into the FastAPI adapter:
+
+```text
+model-simulator entry point
+          |
+          +--> SyntheticEmbeddingService --> EmbeddingService port
+          |
+          +--> FastAPI HTTP adapter --> /v1/embeddings, /health
+```
+
+This keeps framework and process configuration at the edge. The HTTP adapter knows the port, but
+does not import the synthetic implementation, Modal, vLLM, or deployment code. The composition root
+is the only place that selects the deterministic simulator. The service package owns its HTTP runtime
+dependencies and can run as its own local process or container. These types intentionally resemble
+some research-lab types but are not imported from the lab: independent ownership is more valuable
+here than sharing a few small dataclasses.
+See the [model simulator](../services/model-simulator/README.md).
+
+### Real vLLM model server
+
+`services/vllm-model-server/` owns the real vLLM process configuration, NVIDIA Dockerfile, Modal
+deployment adapter, deployment CLI, and their tests. `embedding_lab.adapters.vllm` retains only the
+HTTP client and response parser because those belong to the experiment side of the boundary.
+
+The Docker and Modal paths both launch the same pinned `vllm serve` API. They are alternative
+deployment mechanisms, not two logical services. See the
+[vLLM model server](../services/vllm-model-server/README.md).

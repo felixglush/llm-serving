@@ -1,14 +1,13 @@
 import pytest
 
-import embedding_lab.adapters.modal.deployment as modal_deployment
-from embedding_lab.adapters.modal.deployment import (
+import vllm_model_server.modal_deployment as modal_deployment
+from vllm_model_server.domain import ModelConfig, ReplicaTopology
+from vllm_model_server.modal_deployment import (
     ModalDeploymentBackend,
     ModalDeploymentPlan,
     ModalDeploymentSettings,
     build_modal_app,
 )
-from embedding_lab.domain.model import ModelConfig
-from embedding_lab.domain.topology import ReplicaTopology
 
 
 def test_modal_plan_keeps_one_replica_on_one_gpu() -> None:
@@ -77,7 +76,7 @@ def test_each_serving_configuration_has_a_stable_distinct_identity() -> None:
     assert qwen.configuration_fingerprint == qwen_again.configuration_fingerprint
     assert other_revision.app_name != qwen.app_name
     assert other_model.app_name != qwen.app_name
-    assert qwen.app_name.startswith("embedding-lab-qwen-qwen3-embedding-0-6b-")
+    assert qwen.app_name.startswith("vllm-model-server-qwen-qwen3-embedding-0-6b-")
 
 
 @pytest.mark.parametrize(
@@ -87,15 +86,17 @@ def test_each_serving_configuration_has_a_stable_distinct_identity() -> None:
         ReplicaTopology(replicas=1, tensor_parallel_size=2),
     ],
 )
-def test_stage_six_rejects_topologies_it_cannot_yet_provision(
+def test_service_rejects_topologies_it_cannot_yet_provision(
     topology: ReplicaTopology,
 ) -> None:
-    with pytest.raises(ValueError, match="Stage 6 supports exactly one replica on one worker"):
+    with pytest.raises(
+        ValueError, match="vllm-model-server supports exactly one replica on one worker"
+    ):
         ModalDeploymentBackend().plan(ModelConfig("model"), topology)
 
 
 @pytest.mark.parametrize("gpu_type", ["L4:2", "L4:1", "L4,L4"])
-def test_stage_six_rejects_multi_gpu_resource_syntax(gpu_type: str) -> None:
+def test_service_rejects_multi_gpu_resource_syntax(gpu_type: str) -> None:
     with pytest.raises(ValueError, match="gpu_type must name one GPU type"):
         ModalDeploymentSettings(gpu_type=gpu_type)
 

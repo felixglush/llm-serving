@@ -2,9 +2,7 @@ import json
 
 import pytest
 
-from embedding_lab.adapters.modal.deployment import ModalDeploymentBackend
 from embedding_lab.cli.main import main
-from embedding_lab.domain.deployment import Deployment
 
 
 def test_verify_command_runs_fake_service(capsys: pytest.CaptureFixture[str]) -> None:
@@ -48,37 +46,3 @@ def test_vllm_experiment_requires_an_immutable_revision(capsys: pytest.CaptureFi
         main(["experiment", "--service", "vllm", "--base-url", "https://example.test"])
 
     assert "--revision is required for a persisted vllm experiment" in capsys.readouterr().err
-
-
-def test_deploy_command_reports_the_modal_endpoint(
-    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def deploy(
-        self: ModalDeploymentBackend, model: object, topology: object
-    ) -> Deployment:
-        return Deployment(
-            name="embedding-lab-model-r1-tp1-abc123",
-            endpoint_url="https://example--embeddings.modal.run",
-            configuration_fingerprint="abc123",
-        )
-
-    monkeypatch.setattr(ModalDeploymentBackend, "deploy", deploy)
-
-    code = main(
-        [
-            "deploy",
-            "--provider",
-            "modal",
-            "--model",
-            "Qwen/Qwen3-Embedding-0.6B",
-            "--revision",
-            "revision-a",
-        ]
-    )
-
-    assert code == 0
-    assert json.loads(capsys.readouterr().out) == {
-        "name": "embedding-lab-model-r1-tp1-abc123",
-        "endpoint_url": "https://example--embeddings.modal.run",
-        "configuration_fingerprint": "abc123",
-    }

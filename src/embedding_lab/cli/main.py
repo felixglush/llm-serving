@@ -8,10 +8,6 @@ from collections.abc import Sequence
 from dataclasses import asdict
 
 from embedding_lab.adapters.fake.embedding_service import FakeEmbeddingService
-from embedding_lab.adapters.modal.deployment import (
-    ModalDeploymentBackend,
-    ModalDeploymentSettings,
-)
 from embedding_lab.adapters.vllm.embedding_service import (
     VllmEmbeddingService,
     VllmRequestError,
@@ -42,9 +38,7 @@ DEFAULT_TEXTS = ("A short example sentence.", "A different example sentence.")
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="embedding-lab")
     commands = parser.add_subparsers(dest="command", required=True)
-    verify_parser = commands.add_parser(
-        "verify", help="check an embedding service response"
-    )
+    verify_parser = commands.add_parser("verify", help="check an embedding service response")
     verify_parser.add_argument(
         "--service", choices=("fake", "vllm"), default="fake", help="service adapter to use"
     )
@@ -136,22 +130,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     vllm_bench_parser.add_argument("--publish", action="store_true")
     vllm_bench_parser.add_argument("--project", default=os.environ.get("WANDB_PROJECT"))
     vllm_bench_parser.add_argument("--entity", default=os.environ.get("WANDB_ENTITY"))
-    deploy_parser = commands.add_parser("deploy", help="deploy an embedding service")
-    deploy_parser.add_argument("--provider", choices=("modal",), required=True)
-    deploy_parser.add_argument(
-        "--model", default="Qwen/Qwen3-Embedding-0.6B", help="model repository ID"
-    )
-    deploy_parser.add_argument("--revision", help="immutable model revision")
-    deploy_parser.add_argument("--max-sequence-length", type=int, default=8_192)
-    deploy_parser.add_argument("--embedding-dimensions", type=int)
-    deploy_parser.add_argument("--replicas", type=int, default=1)
-    deploy_parser.add_argument("--tensor-parallel-size", type=int, default=1)
-    deploy_parser.add_argument("--gpu-type", default="L4")
-    deploy_parser.add_argument("--container-concurrency", type=int, default=32)
-    deploy_parser.add_argument("--max-num-seqs", type=int, default=32)
-    deploy_parser.add_argument("--max-num-batched-tokens", type=int, default=8_192)
-    deploy_parser.add_argument("--min-containers", type=int, choices=(0, 1), default=0)
-    deploy_parser.add_argument("--vllm-version", default="0.29.0")
     args = parser.parse_args(argv)
 
     if args.command == "verify":
@@ -336,37 +314,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(bench_output))
         except (VllmBenchError, ValueError) as error:
             vllm_bench_parser.error(str(error))
-        return 0
-    if args.command == "deploy":
-        settings = ModalDeploymentSettings(
-            gpu_type=args.gpu_type,
-            vllm_version=args.vllm_version,
-            container_concurrency=args.container_concurrency,
-            max_num_seqs=args.max_num_seqs,
-            max_num_batched_tokens=args.max_num_batched_tokens,
-            min_containers=args.min_containers,
-        )
-        deployment = ModalDeploymentBackend(settings).deploy(
-            ModelConfig(
-                model_id=args.model,
-                revision=args.revision,
-                max_sequence_length=args.max_sequence_length,
-                embedding_dimensions=args.embedding_dimensions,
-            ),
-            ReplicaTopology(
-                replicas=args.replicas,
-                tensor_parallel_size=args.tensor_parallel_size,
-            ),
-        )
-        print(
-            json.dumps(
-                {
-                    "name": deployment.name,
-                    "endpoint_url": deployment.endpoint_url,
-                    "configuration_fingerprint": deployment.configuration_fingerprint,
-                }
-            )
-        )
         return 0
     return 2
 

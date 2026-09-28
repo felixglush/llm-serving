@@ -1,0 +1,1 @@
+"""Standalone embedding gateway."""

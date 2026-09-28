@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Embedding Service Contract",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "The OpenAI-compatible embedding subset consumed across service boundaries."
   },
   "paths": {
@@ -20,6 +20,16 @@
         "responses": {
           "200": {
             "description": "Ordered embeddings",
+            "headers": {
+              "X-Request-ID": {
+                "description": "Gateway-generated correlation identifier.",
+                "schema": {"type": "string", "minLength": 1}
+              },
+              "X-Backend-ID": {
+                "description": "Configured backend identity selected for this lab request.",
+                "schema": {"type": "string", "minLength": 1}
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {"$ref": "#/components/schemas/EmbeddingResponse"}
@@ -29,7 +39,9 @@
           "400": {"$ref": "#/components/responses/Error"},
           "413": {"$ref": "#/components/responses/Error"},
           "429": {"$ref": "#/components/responses/Error"},
-          "503": {"$ref": "#/components/responses/Error"}
+          "502": {"$ref": "#/components/responses/Error"},
+          "503": {"$ref": "#/components/responses/Error"},
+          "504": {"$ref": "#/components/responses/Error"}
         }
       }
     }
@@ -102,6 +114,12 @@
     "responses": {
       "Error": {
         "description": "Bounded error envelope",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Gateway-generated correlation identifier.",
+            "schema": {"type": "string", "minLength": 1}
+          }
+        },
         "content": {
           "application/json": {
             "schema": {"$ref": "#/components/schemas/ErrorEnvelope"}

@@ -1,6 +1,6 @@
 # Model server simulator
 
-The model server simulator is a small standalone microservice for embedding-gateway development.
+The model server simulator is a small standalone microservice for gateway development.
 It owns its deterministic synthetic embedding implementation. It does not load a model, deploy
 vLLM, or call Modal. Token counts are synthetic (one per input string) and must not be presented as
 measured model throughput. Its current API scope is embeddings. The broader service name leaves

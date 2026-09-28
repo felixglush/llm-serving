@@ -1,0 +1,20 @@
+[project]
+name = "gateway"
+version = "0.1.0"
+description = "A standalone embedding gateway for routing requests across model servers."
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.141.1,<1",
+    "httpx>=0.28.1,<1",
+    "uvicorn>=0.54.0,<1",
+]
+
+[project.scripts]
+gateway = "gateway.main:main"
+
+[build-system]
+requires = ["hatchling>=1.32.4,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gateway"]

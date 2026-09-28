@@ -12,7 +12,10 @@ def test_embedding_contract_is_a_versioned_openapi_document() -> None:
     assert contract["openapi"].startswith("3.1.")
     operation = contract["paths"]["/v1/embeddings"]["post"]
     assert operation["requestBody"]["required"] is True
-    assert set(operation["responses"]) >= {"200", "400", "413", "429", "503"}
+    assert set(operation["responses"]) >= {"200", "400", "413", "429", "502", "503", "504"}
+    assert operation["responses"]["200"]["headers"]["X-Request-ID"]
+    assert operation["responses"]["200"]["headers"]["X-Backend-ID"]
+    assert contract["components"]["responses"]["Error"]["headers"]["X-Request-ID"]
     assert contract["components"]["schemas"]["EmbeddingRequest"]["required"] == [
         "model",
         "input",

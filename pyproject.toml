@@ -46,6 +46,8 @@ src = [
     "services/model-server-simulator/tests",
     "services/model-server/src",
     "services/model-server/tests",
+    "services/gateway/src",
+    "services/gateway/tests",
 ]
 
 [tool.ruff.lint]

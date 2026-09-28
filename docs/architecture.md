@@ -36,11 +36,11 @@ concurrency or input-length sweep reuses the same endpoint instead of silently c
 Deployable processes live under `services/`, with their package manifest, container definition,
 operating guide, source, and tests colocated. The existing `embedding_lab` package remains the
 provider-portable research client; future gateway code belongs in a sibling
-`services/embedding-gateway/` package rather than in the lab's model-deployment adapters.
+`services/gateway/` package rather than in the lab's model-deployment adapters.
 
 ```text
                          HTTP
-embedding_gateway  ------------------+
+gateway            ------------------+
 embedding_lab      ----------------+  |
                                      v  v
                             /v1/embeddings
@@ -88,3 +88,21 @@ HTTP client and response parser because those belong to the experiment side of t
 The Docker and Modal paths both launch the same pinned `vllm serve` API. They are alternative
 deployment mechanisms, not two logical services. See the
 [model server](../services/model-server/README.md).
+
+### Gateway
+
+`services/gateway/` owns the inbound HTTP adapter, embedding-routing use case, backend pool,
+selection strategies, outbound HTTP adapter, process configuration, and container. It does not
+import Python code from the research lab or either model server.
+
+```text
+FastAPI adapter -> Gateway -> BackendPool -> BackendClient <- HTTPX adapter
+                                  |
+                                  +-> RoundRobinSelection
+```
+
+The application depends on gateway-owned values and narrow interfaces. FastAPI and HTTPX stay in
+outward adapters. The composition root selects concrete adapters and the round-robin strategy.
+`BackendPool` keeps selection and reservation in one short critical section, but never holds its
+lock during network I/O. This prepares the strategy seam for least-outstanding selection without
+exposing reservation lifecycle to HTTP handlers.

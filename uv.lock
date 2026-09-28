@@ -10,8 +10,9 @@ resolution-markers = [
 [manifest]
 members = [
     "embedding-serving-lab",
-    "model-server-simulator",
+    "gateway",
     "model-server",
+    "model-server-simulator",
 ]
 
 [[package]]
@@ -514,6 +515,23 @@ wheels = [
 ]
 
 [[package]]
+name = "gateway"
+version = "0.1.0"
+source = { editable = "services/gateway" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.141.1,<1" },
+    { name = "httpx", specifier = ">=0.28.1,<1" },
+    { name = "uvicorn", specifier = ">=0.54.0,<1" },
+]
+
+[[package]]
 name = "googleapis-common-protos"
 version = "1.75.4"
 source = { registry = "https://pypi.org/simple" }
@@ -754,6 +772,20 @@ sdist = { url = "https://files.pythonhosted.org/packages/b9/a5/9e322043716e511b7
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/19/b3dca8baec119126058b12ca620e44022e4d08a091956668bd04180c89a7/modal-1.5.5-py3-none-any.whl", hash = "sha256:8d10d3ee09818aaba1973b73ce2521ab8961b63a29b5b52e3ff0d25e7a74808e", size = 985163, upload-time = "2026-08-28T19:51:32.404Z" },
 ]
+
+[[package]]
+name = "model-server"
+version = "0.1.0"
+source = { editable = "services/model-server" }
+
+[package.optional-dependencies]
+modal = [
+    { name = "modal" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "modal", marker = "extra == 'modal'", specifier = ">=1.5.5,<2" }]
+provides-extras = ["modal"]
 
 [[package]]
 name = "model-server-simulator"
@@ -1491,20 +1523,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/da/34/30e9280707135d2cf
 wheels = [
     { url = "https://files.pythonhosted.org/packages/38/0c/b54a4fdd7f90a3af8b02ebc9ce6712c2c208b7926a2f7bad95c33ebbe943/uvicorn-0.54.0-py3-none-any.whl", hash = "sha256:505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf", size = 87427, upload-time = "2026-09-25T06:52:35.829Z" },
 ]
-
-[[package]]
-name = "model-server"
-version = "0.1.0"
-source = { editable = "services/model-server" }
-
-[package.optional-dependencies]
-modal = [
-    { name = "modal" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "modal", marker = "extra == 'modal'", specifier = ">=1.5.5,<2" }]
-provides-extras = ["modal"]
 
 [[package]]
 name = "wandb"

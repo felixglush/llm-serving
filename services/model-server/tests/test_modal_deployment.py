@@ -130,45 +130,35 @@ def test_unpinned_model_does_not_pass_a_revision_flag() -> None:
     assert "--revision" not in plan.command
 
 
-def test_deploy_uses_the_modal_url_without_printing_progress(
+def test_deploy_returns_modal_endpoint_for_the_planned_configuration(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    captured_plans: list[ModalDeploymentPlan] = []
+    deploy_calls: list[tuple[str, str]] = []
+
     class FakeApp:
         def deploy(self, *, name: str, strategy: str) -> None:
-            assert name == plan.app_name
-            assert strategy == "recreate"
+            deploy_calls.append((name, strategy))
 
     class FakeWebFunction:
         def get_web_url(self) -> str:
             return "https://example--embeddings.modal.run"
 
     def fake_build(plan: ModalDeploymentPlan) -> tuple[FakeApp, FakeWebFunction]:
+        captured_plans.append(plan)
         return FakeApp(), FakeWebFunction()
 
     monkeypatch.setattr(modal_deployment, "build_modal_app", fake_build)
-    plan = ModalDeploymentBackend().plan(ModelConfig("model"), ReplicaTopology())
-
-    assert modal_deployment._deploy_to_modal(plan) == "https://example--embeddings.modal.run"
-    assert capsys.readouterr().out == ""
-
-
-def test_deploy_returns_the_endpoint_for_the_planned_configuration() -> None:
-    captured: list[ModalDeploymentPlan] = []
-
-    def deploy_plan(plan: ModalDeploymentPlan) -> str:
-        captured.append(plan)
-        return "https://example--embeddings.modal.run"
-
-    backend = ModalDeploymentBackend(deployer=deploy_plan)
-
-    result = backend.deploy(
+    result = ModalDeploymentBackend().deploy(
         ModelConfig("Qwen/Qwen3-Embedding-0.6B", revision="revision-a"),
         ReplicaTopology(),
     )
 
-    assert result.name == captured[0].app_name
-    assert result.configuration_fingerprint == captured[0].configuration_fingerprint
+    assert result.name == captured_plans[0].app_name
+    assert result.configuration_fingerprint == captured_plans[0].configuration_fingerprint
     assert result.endpoint_url == "https://example--embeddings.modal.run"
+    assert deploy_calls == [(captured_plans[0].app_name, "recreate")]
+    assert capsys.readouterr().out == ""
 
 
 def test_modal_app_can_be_constructed_without_deploying() -> None:

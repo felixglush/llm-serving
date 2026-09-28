@@ -21,22 +21,46 @@ async def test_model_server_simulator_http_server_public_contract() -> None:
         delay_seconds=0.0,
         max_concurrency=2,
     )
+    second_settings = ModelServerSimulatorSettings(
+        backend_id="backend-b",
+        model="lab-embedding",
+        dimensions=3,
+        delay_seconds=0.0,
+        max_concurrency=2,
+    )
     app = create_app(settings, SyntheticEmbeddingService(dimensions=settings.dimensions))
-    transport = httpx.ASGITransport(app=app)
+    second_app = create_app(
+        second_settings,
+        SyntheticEmbeddingService(dimensions=second_settings.dimensions),
+    )
+    body = {
+        "model": "lab-embedding",
+        "input": ["alpha", "beta"],
+        "encoding_format": "float",
+    }
 
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.post(
-            "/v1/embeddings",
-            json={
-                "model": "lab-embedding",
-                "input": ["alpha", "beta"],
-                "encoding_format": "float",
-            },
-        )
+    async with (
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://backend-a",
+        ) as client,
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=second_app),
+            base_url="http://backend-b",
+        ) as second_client,
+    ):
+        response = await client.post("/v1/embeddings", json=body)
+        repeated = await client.post("/v1/embeddings", json=body)
+        second_response = await second_client.post("/v1/embeddings", json=body)
 
         assert response.status_code == 200
         assert response.headers["X-Backend-ID"] == "backend-a"
+        assert repeated.status_code == 200
+        assert second_response.status_code == 200
+        assert second_response.headers["X-Backend-ID"] == "backend-b"
         payload = response.json()
+        assert repeated.json()["data"] == payload["data"]
+        assert second_response.json()["data"] == payload["data"]
         assert payload["model"] == "lab-embedding"
         assert [item["index"] for item in payload["data"]] == [0, 1]
         assert all(len(item["embedding"]) == 3 for item in payload["data"])

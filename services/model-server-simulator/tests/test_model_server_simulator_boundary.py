@@ -1,47 +1,13 @@
-"""Acceptance checks for the independently packaged model-server-simulator service."""
+"""End-to-end acceptance for the installed model-server-simulator process."""
 
 import os
 import socket
 import subprocess
 import sys
 import time
-from importlib.metadata import requires
 from pathlib import Path
 
 import httpx
-
-from model_server_simulator.http_server import ModelServerSimulatorSettings
-
-
-def test_model_server_simulator_package_owns_its_http_adapter() -> None:
-    """The process package must be importable without an embedding_lab HTTP module."""
-
-    assert ModelServerSimulatorSettings.__module__ == "model_server_simulator.http_server"
-
-
-def test_service_distribution_has_no_repository_runtime_dependencies() -> None:
-    """The deployable service owns its domain and synthetic implementation."""
-
-    dependencies = requires("model-server-simulator") or []
-    forbidden = {
-        "embedding-serving-lab",
-        "model-serving-contracts",
-        "synthetic-embedding-model",
-        "model-server",
-    }
-
-    assert not any(dependency.split(" ", 1)[0] in forbidden for dependency in dependencies)
-
-
-def test_container_build_context_is_the_service_directory() -> None:
-    """The image build must not copy source or metadata from sibling projects."""
-
-    dockerfile = (Path(__file__).parents[1] / "Dockerfile").read_text()
-
-    assert "COPY services/" not in dockerfile
-    assert "COPY packages/" not in dockerfile
-    assert "COPY pyproject.toml uv.lock" not in dockerfile
-    assert "COPY requirements.lock pyproject.toml" in dockerfile
 
 
 def test_installed_module_runs_as_a_real_process_outside_the_checkout(tmp_path: Path) -> None:

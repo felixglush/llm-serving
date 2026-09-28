@@ -4,7 +4,6 @@ import hashlib
 import json
 import re
 import sys
-from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -89,11 +88,8 @@ class ModalDeploymentBackend:
     def __init__(
         self,
         settings: ModalDeploymentSettings | None = None,
-        *,
-        deployer: Callable[[ModalDeploymentPlan], str] | None = None,
     ) -> None:
         self._settings = settings or ModalDeploymentSettings()
-        self._deployer = deployer or _deploy_to_modal
 
     def deploy(
         self,
@@ -103,7 +99,7 @@ class ModalDeploymentBackend:
         """Deploy a planned app and return its provider-neutral identity."""
 
         plan = self.plan(model, topology)
-        endpoint_url = self._deployer(plan)
+        endpoint_url = _deploy_to_modal(plan)
         return Deployment(
             name=plan.app_name,
             endpoint_url=endpoint_url,

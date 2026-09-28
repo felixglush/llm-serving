@@ -42,10 +42,10 @@ target-version = "py313"
 src = [
     "src",
     "tests",
-    "services/model-simulator/src",
-    "services/model-simulator/tests",
-    "services/vllm-model-server/src",
-    "services/vllm-model-server/tests",
+    "services/model-server-simulator/src",
+    "services/model-server-simulator/tests",
+    "services/model-server/src",
+    "services/model-server/tests",
 ]
 
 [tool.ruff.lint]

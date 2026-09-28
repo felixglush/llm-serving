@@ -10,8 +10,8 @@ resolution-markers = [
 [manifest]
 members = [
     "embedding-serving-lab",
-    "model-simulator",
-    "vllm-model-server",
+    "model-server-simulator",
+    "model-server",
 ]
 
 [[package]]
@@ -756,9 +756,9 @@ wheels = [
 ]
 
 [[package]]
-name = "model-simulator"
+name = "model-server-simulator"
 version = "0.1.0"
-source = { editable = "services/model-simulator" }
+source = { editable = "services/model-server-simulator" }
 dependencies = [
     { name = "fastapi" },
     { name = "uvicorn" },
@@ -1493,9 +1493,9 @@ wheels = [
 ]
 
 [[package]]
-name = "vllm-model-server"
+name = "model-server"
 version = "0.1.0"
-source = { editable = "services/vllm-model-server" }
+source = { editable = "services/model-server" }
 
 [package.optional-dependencies]
 modal = [

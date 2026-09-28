@@ -47,7 +47,7 @@ embedding_lab      ----------------+  |
                            contract version 1
                               ^           ^
                               |           |
-                 model-simulator      vllm-model-server
+                 model-server-simulator      model-server
                  synthetic process    real model process
 ```
 
@@ -57,14 +57,14 @@ HTTP promise in [`contracts/embeddings-v1.openapi.json`](../contracts/embeddings
 not FastAPI code or importable dataclasses. Clients translate that wire representation into their
 own application types.
 
-### Standalone model simulator
+### Standalone model server simulator
 
-The model simulator is a separate process, not part of the Modal or vLLM deployment adapter.
+The model server simulator is a separate process, not part of the Modal or vLLM deployment adapter.
 Its composition root injects `SyntheticEmbeddingService` through its local `EmbeddingService` port
 into the FastAPI adapter:
 
 ```text
-model-simulator entry point
+model-server-simulator entry point
           |
           +--> SyntheticEmbeddingService --> EmbeddingService port
           |
@@ -77,14 +77,14 @@ is the only place that selects the deterministic simulator. The service package 
 dependencies and can run as its own local process or container. These types intentionally resemble
 some research-lab types but are not imported from the lab: independent ownership is more valuable
 here than sharing a few small dataclasses.
-See the [model simulator](../services/model-simulator/README.md).
+See the [model server simulator](../services/model-server-simulator/README.md).
 
-### Real vLLM model server
+### Real model server
 
-`services/vllm-model-server/` owns the real vLLM process configuration, NVIDIA Dockerfile, Modal
+`services/model-server/` owns the real vLLM process configuration, NVIDIA Dockerfile, Modal
 deployment adapter, deployment CLI, and their tests. `embedding_lab.adapters.vllm` retains only the
 HTTP client and response parser because those belong to the experiment side of the boundary.
 
 The Docker and Modal paths both launch the same pinned `vllm serve` API. They are alternative
 deployment mechanisms, not two logical services. See the
-[vLLM model server](../services/vllm-model-server/README.md).
+[model server](../services/model-server/README.md).

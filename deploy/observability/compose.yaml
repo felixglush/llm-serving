@@ -12,9 +12,9 @@ services:
       - --dimensions
       - "8"
       - --delay-seconds
-      - "0.02"
+      - ${BACKEND_A_DELAY_SECONDS:-0.02}
       - --max-concurrency
-      - "8"
+      - ${BACKEND_A_MAX_CONCURRENCY:-8}
       - --host
       - 0.0.0.0
       - --port
@@ -42,9 +42,9 @@ services:
       - --dimensions
       - "8"
       - --delay-seconds
-      - "2.0"
+      - ${BACKEND_B_DELAY_SECONDS:-2.0}
       - --max-concurrency
-      - "8"
+      - ${BACKEND_B_MAX_CONCURRENCY:-8}
       - --host
       - 0.0.0.0
       - --port
@@ -74,7 +74,7 @@ services:
       - --dimensions
       - "8"
       - --request-timeout-seconds
-      - "10"
+      - ${GATEWAY_REQUEST_TIMEOUT_SECONDS:-10}
       - --host
       - 0.0.0.0
       - --port

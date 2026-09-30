@@ -61,18 +61,37 @@ class Workload:
         count. Provider-reported usage remains authoritative for benchmark token throughput.
         """
 
-        if request_index < 0:
-            raise ValueError("request_index must not be negative")
-        return tuple(
-            _synthetic_text(
-                seed=self.seed,
-                corpus_version=self.corpus_version,
-                request_index=request_index,
-                text_index=text_index,
-                target_tokens=self.target_tokens_per_text,
-            )
-            for text_index in range(self.texts_per_request)
+        return synthetic_texts(
+            seed=self.seed,
+            corpus_version=self.corpus_version,
+            request_index=request_index,
+            texts_per_request=self.texts_per_request,
+            target_tokens_per_text=self.target_tokens_per_text,
         )
+
+
+def synthetic_texts(
+    *,
+    seed: int,
+    corpus_version: str,
+    request_index: int,
+    texts_per_request: int,
+    target_tokens_per_text: int,
+) -> tuple[str, ...]:
+    """Generate one deterministic synthetic request without choosing a load policy."""
+
+    if request_index < 0:
+        raise ValueError("request_index must not be negative")
+    return tuple(
+        _synthetic_text(
+            seed=seed,
+            corpus_version=corpus_version,
+            request_index=request_index,
+            text_index=text_index,
+            target_tokens=target_tokens_per_text,
+        )
+        for text_index in range(texts_per_request)
+    )
 
 
 def _synthetic_text(

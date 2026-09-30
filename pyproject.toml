@@ -36,6 +36,7 @@ addopts = "-ra"
 asyncio_mode = "auto"
 testpaths = ["tests", "services"]
 markers = [
+    "gateway_load_e2e: real Docker Compose acceptance test for fixed-arrival gateway load",
     "observability_e2e: real Docker Compose acceptance test for Prometheus and Grafana",
 ]
 

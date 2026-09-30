@@ -23,6 +23,12 @@ Backend B has a two-second synthetic delay so that its higher duration and outst
 to see. Histograms estimate percentiles. Gateway upstream duration includes HTTP transport, backend
 waiting, and response validation; it is not model-only processing time.
 
+The Compose file also accepts `BACKEND_A_DELAY_SECONDS`, `BACKEND_B_DELAY_SECONDS`,
+`BACKEND_A_MAX_CONCURRENCY`, `BACKEND_B_MAX_CONCURRENCY`, and
+`GATEWAY_REQUEST_TIMEOUT_SECONDS`. These variables change the synthetic topology at process
+startup. They do not change gateway routing policy. The fixed-arrival experiment recipes set these
+values through reviewed `.env` files under `experiments/gateway-load/`.
+
 Stop the stack and remove its temporary metrics database:
 
 ```bash
@@ -33,4 +39,11 @@ Run the real acceptance test with:
 
 ```bash
 RUN_OBSERVABILITY_E2E=1 .venv/bin/pytest -q tests/test_observability_stack.py
+```
+
+The Stage 4 load acceptance test uses the same real containers and network with bounded synthetic
+traffic:
+
+```bash
+RUN_GATEWAY_LOAD_E2E=1 .venv/bin/pytest -q tests/test_gateway_load_e2e.py
 ```

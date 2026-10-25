@@ -7,6 +7,10 @@ runs these steps once.
 
 ## Claude Code
 
+`.claude/settings.json` registers the `runpod/runpod-plugins-official` marketplace and
+enables `runpod@runpod`, so Claude Code offers to install the plugin when you trust this
+repo. To install it by hand instead:
+
 ```sh
 claude plugin marketplace add runpod/runpod-plugins-official
 claude plugin install runpod@runpod

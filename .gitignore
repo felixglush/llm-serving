@@ -14,9 +14,9 @@ build/
 .env
 .env.*
 !.env.example
-/wandb/
+/*/wandb/
 .agents/docs/
 
-# Local experiment output can be retained explicitly with git add -f.
-results/*
-!results/.gitkeep
+# Each course folder keeps its own local experiment output; retain it explicitly with git add -f.
+/*/results/*
+!/*/results/.gitkeep

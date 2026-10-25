@@ -42,7 +42,7 @@ Sign in through the browser the first time a Runpod tool runs.
 ## Headless and CI
 
 Without a person to complete OAuth, export `RUNPOD_API_KEY` from a secret store (see
-`.env.example`; never commit or print the key) and register the server with a bearer header:
+`embedding-serving-lab/.env.example`; never commit or print the key) and register the server with a bearer header:
 
 ```sh
 claude mcp add --transport http runpod -s user https://mcp.runpod.io/ \

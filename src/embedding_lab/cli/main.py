@@ -8,6 +8,8 @@ from collections.abc import Sequence
 from dataclasses import asdict
 
 from embedding_lab.adapters.fake.embedding_service import FakeEmbeddingService
+from embedding_lab.adapters.filesystem.gateway_load_store import GatewayLoadStore
+from embedding_lab.adapters.gateway.http_client import HttpxGatewayClient
 from embedding_lab.adapters.vllm.embedding_service import (
     VllmEmbeddingService,
     VllmRequestError,
@@ -16,6 +18,7 @@ from embedding_lab.adapters.vllm.schemas import VllmResponseError
 from embedding_lab.adapters.wandb.publisher import WandbPublisher
 from embedding_lab.application.benchmark import RunBenchmark
 from embedding_lab.application.experiments import ExperimentStore, new_experiment_id, utc_now
+from embedding_lab.application.gateway_load import RunGatewayLoad
 from embedding_lab.application.verify import validate_embeddings
 from embedding_lab.application.vllm_bench import (
     VllmBenchError,
@@ -27,6 +30,13 @@ from embedding_lab.domain.benchmark import BenchmarkResult
 from embedding_lab.domain.deployment import Deployment
 from embedding_lab.domain.embedding import EmbeddingResponse
 from embedding_lab.domain.experiment import Experiment
+from embedding_lab.domain.gateway_load import (
+    FixedArrivalPlan,
+    GatewayLoadClientConfig,
+    GatewayLoadExperiment,
+    GatewayLoadResult,
+    GatewayLoadTarget,
+)
 from embedding_lab.domain.model import ModelConfig
 from embedding_lab.domain.topology import ReplicaTopology
 from embedding_lab.domain.vllm_benchmark import VllmBenchRecord
@@ -100,6 +110,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     experiment_parser.add_argument("--publish", action="store_true")
     experiment_parser.add_argument("--project", default=os.environ.get("WANDB_PROJECT"))
     experiment_parser.add_argument("--entity", default=os.environ.get("WANDB_ENTITY"))
+    gateway_load_parser = commands.add_parser(
+        "gateway-load",
+        help="run and save a bounded fixed-arrival-rate gateway experiment",
+    )
+    gateway_load_parser.add_argument("--base-url", default=os.environ.get("GATEWAY_BASE_URL"))
+    gateway_load_parser.add_argument(
+        "--model",
+        default=os.environ.get("GATEWAY_MODEL", "lab-embedding"),
+    )
+    gateway_load_parser.add_argument("--request-rate", type=float, default=10.0)
+    gateway_load_parser.add_argument("--duration-seconds", type=float, default=10.0)
+    gateway_load_parser.add_argument("--max-requests", type=int, default=100)
+    gateway_load_parser.add_argument("--max-outstanding", type=int, default=32)
+    gateway_load_parser.add_argument("--drain-timeout-seconds", type=float, default=5.0)
+    gateway_load_parser.add_argument("--request-timeout-seconds", type=float, default=30.0)
+    gateway_load_parser.add_argument("--texts-per-request", type=int, default=1)
+    gateway_load_parser.add_argument("--target-tokens-per-text", type=int, default=32)
+    gateway_load_parser.add_argument("--seed", type=int, default=0)
+    gateway_load_parser.add_argument("--corpus-version", default="synthetic-v1")
+    gateway_load_parser.add_argument("--target-label", default="gateway-load-target")
+    gateway_load_parser.add_argument(
+        "--target-kind",
+        choices=("synthetic", "real"),
+        default="synthetic",
+    )
+    gateway_load_parser.add_argument("--results-dir", default="results/gateway-load")
     vllm_bench_parser = commands.add_parser(
         "vllm-bench", help="run vLLM's reference serving benchmark and optionally publish it"
     )
@@ -241,6 +277,59 @@ def main(argv: Sequence[str] | None = None) -> int:
             output["wandb"] = asdict(receipt)
         print(json.dumps(output))
         return 0
+    if args.command == "gateway-load":
+        if args.base_url is None:
+            gateway_load_parser.error("--base-url or GATEWAY_BASE_URL is required")
+        try:
+            load_plan = FixedArrivalPlan(
+                request_rate=args.request_rate,
+                duration_seconds=args.duration_seconds,
+                max_requests=args.max_requests,
+                max_outstanding=args.max_outstanding,
+                drain_timeout_seconds=args.drain_timeout_seconds,
+                texts_per_request=args.texts_per_request,
+                target_tokens_per_text=args.target_tokens_per_text,
+                seed=args.seed,
+                corpus_version=args.corpus_version,
+            )
+            target = GatewayLoadTarget(
+                base_url=args.base_url,
+                model=args.model,
+                label=args.target_label,
+                kind=args.target_kind,
+            )
+            client_config = GatewayLoadClientConfig(
+                request_timeout_seconds=args.request_timeout_seconds
+            )
+            gateway_load_result = asyncio.run(_run_gateway_load(target, load_plan, client_config))
+            gateway_experiment = GatewayLoadExperiment(
+                experiment_id=new_experiment_id(),
+                created_at=utc_now(),
+                target=target,
+                client=client_config,
+                plan=load_plan,
+                result=gateway_load_result,
+            )
+            record_path = GatewayLoadStore(args.results_dir).save(gateway_experiment)
+        except (ValueError, FileExistsError) as error:
+            gateway_load_parser.error(str(error))
+        summary = gateway_load_result.to_dict()
+        summary.pop("observations")
+        output = {
+            "experiment_id": gateway_experiment.experiment_id,
+            "record_path": str(record_path),
+            "target": asdict(target),
+            "client": asdict(client_config),
+            "plan": asdict(load_plan),
+            "result": summary,
+            "capacity_claim": (
+                "synthetic evidence; not production capacity"
+                if target.kind == "synthetic"
+                else "bounded environment-specific experiment"
+            ),
+        }
+        print(json.dumps(output))
+        return 0
     if args.command == "vllm-bench":
         if args.base_url is None:
             vllm_bench_parser.error("--base-url or EMBEDDING_BASE_URL is required")
@@ -342,6 +431,20 @@ async def _run_benchmark(args: argparse.Namespace, workload: Workload) -> Benchm
         timeout_seconds=args.timeout_seconds,
     ) as service:
         return await RunBenchmark(service).run(workload)
+
+
+async def _run_gateway_load(
+    target: GatewayLoadTarget,
+    plan: FixedArrivalPlan,
+    client_config: GatewayLoadClientConfig,
+) -> GatewayLoadResult:
+    async with HttpxGatewayClient(
+        base_url=target.base_url,
+        model=target.model,
+        api_key=os.environ.get("EMBEDDING_API_KEY"),
+        timeout_seconds=client_config.request_timeout_seconds,
+    ) as client:
+        return await RunGatewayLoad(client).run(plan)
 
 
 def _print_result(

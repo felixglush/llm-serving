@@ -25,6 +25,7 @@ async def test_vllm_adapter_sends_openai_request_and_restores_input_order() -> N
             200,
             json={
                 "object": "list",
+                "model": "Qwen/Qwen3-Embedding-0.6B",
                 "data": [
                     {"object": "embedding", "index": 1, "embedding": [3, 4.5]},
                     {"object": "embedding", "index": 0, "embedding": [1.0, 2.0]},
@@ -55,8 +56,8 @@ async def test_vllm_adapter_sends_openai_request_and_restores_input_order() -> N
         (
             {
                 "data": [
-                    {"index": 0, "embedding": [1.0]},
-                    {"index": 0, "embedding": [2.0]},
+                    {"object": "embedding", "index": 0, "embedding": [1.0]},
+                    {"object": "embedding", "index": 0, "embedding": [2.0]},
                 ],
                 "usage": {"prompt_tokens": 2},
             },
@@ -64,14 +65,14 @@ async def test_vllm_adapter_sends_openai_request_and_restores_input_order() -> N
         ),
         (
             {
-                "data": [{"index": 1, "embedding": [1.0]}],
+                "data": [{"object": "embedding", "index": 1, "embedding": [1.0]}],
                 "usage": {"prompt_tokens": 1},
             },
             "indices must be 0 through 0",
         ),
         (
             {
-                "data": [{"index": 0, "embedding": ["not-a-number"]}],
+                "data": [{"object": "embedding", "index": 0, "embedding": ["not-a-number"]}],
                 "usage": {"prompt_tokens": 1},
             },
             "only numbers",

@@ -70,7 +70,11 @@ class VllmEmbeddingService:
             )
             response.raise_for_status()
             payload = response.json()
-            return parse_embedding_response(payload, expected_count=len(texts))
+            return parse_embedding_response(
+                payload,
+                expected_count=len(texts),
+                expected_model=self._model,
+            )
         except VllmResponseError:
             raise
         except httpx.HTTPStatusError as error:

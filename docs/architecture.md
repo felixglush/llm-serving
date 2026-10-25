@@ -126,3 +126,22 @@ Prometheus pulls metrics through the Docker network. Grafana queries Prometheus.
 in JSON logs and do not become metric labels. Simulator identity is a Prometheus target label. The
 simulator does not repeat deployment identity on every metric. See the
 [local observability stack](../deploy/observability/README.md).
+
+### Gateway load experiments
+
+Fixed-arrival load generation is a one-shot research client, not a deployable request-serving
+microservice. It stays in `embedding_lab` and calls the gateway only through `POST /v1/embeddings`.
+The gateway does not import the experiment runner.
+
+```text
+embedding-lab gateway-load -> gateway -> model server A
+                                  |
+                                  +------> model server B
+
+gateway-load -> results/gateway-load/<experiment-id>/
+```
+
+The application scheduler depends on a gateway client port. The HTTPX adapter implements that port
+and translates the serialized response into experiment-owned values. Intended arrivals continue
+independently of completions. The client cap produces explicit generator drops instead of a hidden
+queue. See the [fixed-arrival recipes](../experiments/gateway-load/README.md).
